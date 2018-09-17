@@ -19,6 +19,7 @@ type Provider = {
     priority?: number;
   };
   handler: (msg: Message) => Message|Promise<Message>;
+  advertise: boolean;
 };
 
 type PendingResponse = {
@@ -62,7 +63,7 @@ async function connect(): Promise<Connection> {
     });
     ws.send(JSON.stringify({
       type: "SbAdvertiseRequest",
-      services: Object.values(providers).map(x => x.service)
+      services: Object.values(providers).filter(x => x.advertise).map(x => x.service)
     }));
     return ws;
   }
@@ -214,10 +215,14 @@ function packetizer(size: number): Transform {
 
 export async function advertise(service: {name: string, capabilities?: string[], priority?: number}, handler: (msg: Message) => Message|Promise<Message>) {
   if (providers[service.name]) throw new Error(`${service.name} provider already exists`);
-  providers[service.name] = {service, handler};
+  providers[service.name] = {
+    service,
+    handler,
+    advertise: true
+  };
   await send({
     type: "SbAdvertiseRequest",
-    services: Object.values(providers).map(x => x.service)
+    services: Object.values(providers).filter(x => x.advertise).map(x => x.service)
   });
 }
 
@@ -225,7 +230,8 @@ export function setServiceHandler(serviceName: string, handler: (msg: Message) =
   if (providers[serviceName]) throw new Error(`${serviceName} provider already exists`);
   providers[serviceName] = {
     service: {name: serviceName},
-    handler
+    handler,
+    advertise: false
   };
 }
 

@@ -35,7 +35,7 @@ async function connect() {
         });
         ws.send(JSON.stringify({
             type: "SbAdvertiseRequest",
-            services: Object.values(providers).map(x => x.service)
+            services: Object.values(providers).filter(x => x.advertise).map(x => x.service)
         }));
         return ws;
     }
@@ -193,10 +193,14 @@ function packetizer(size) {
 async function advertise(service, handler) {
     if (providers[service.name])
         throw new Error(`${service.name} provider already exists`);
-    providers[service.name] = { service, handler };
+    providers[service.name] = {
+        service,
+        handler,
+        advertise: true
+    };
     await send({
         type: "SbAdvertiseRequest",
-        services: Object.values(providers).map(x => x.service)
+        services: Object.values(providers).filter(x => x.advertise).map(x => x.service)
     });
 }
 exports.advertise = advertise;
@@ -205,7 +209,8 @@ function setServiceHandler(serviceName, handler) {
         throw new Error(`${serviceName} provider already exists`);
     providers[serviceName] = {
         service: { name: serviceName },
-        handler
+        handler,
+        advertise: false
     };
 }
 exports.setServiceHandler = setServiceHandler;
