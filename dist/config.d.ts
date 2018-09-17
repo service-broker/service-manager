@@ -11,6 +11,7 @@ export interface Commands {
     viewServiceLogs: string;
 }
 declare const _default: {
+    password: string;
     saveStateInterval: number;
     clientsKeepAliveInterval: number;
     commands: {

@@ -89,7 +89,7 @@ addShutdownHandler(onShutdown);
 function onRequest(req: Message): Message|Promise<Message> {
   const method = req.header.method;
   const args = req.header.args || {};
-  if (method == "clientLogin") return clientLogin(req.header.from);
+  if (method == "clientLogin") return clientLogin(args.password, req.header.from);
   else if (method == "serviceCheckIn") return serviceCheckIn(args.siteName, args.serviceName, args.pid, req.header.from);
 
   const client = clients[req.header.from];
@@ -113,7 +113,8 @@ function onRequest(req: Message): Message|Promise<Message> {
 }
 
 
-function clientLogin(endpointId: string): Message {
+function clientLogin(password: string, endpointId: string): Message {
+  if (password != config.password) throw new Error("Wrong password");
   if (clients[endpointId]) throw new Error("Already logged in");
   logger.info("Client connected", endpointId);
   clients[endpointId] = {endpointId};

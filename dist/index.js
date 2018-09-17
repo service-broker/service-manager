@@ -44,7 +44,7 @@ function onRequest(req) {
     const method = req.header.method;
     const args = req.header.args || {};
     if (method == "clientLogin")
-        return clientLogin(req.header.from);
+        return clientLogin(args.password, req.header.from);
     else if (method == "serviceCheckIn")
         return serviceCheckIn(args.siteName, args.serviceName, args.pid, req.header.from);
     const client = clients[req.header.from];
@@ -83,7 +83,9 @@ function onRequest(req) {
     else
         throw new Error("Unknown method " + method);
 }
-function clientLogin(endpointId) {
+function clientLogin(password, endpointId) {
+    if (password != config_1.default.password)
+        throw new Error("Wrong password");
     if (clients[endpointId])
         throw new Error("Already logged in");
     logger_1.default.info("Client connected", endpointId);
