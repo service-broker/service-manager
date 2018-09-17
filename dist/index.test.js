@@ -7,6 +7,7 @@ beforeAll(() => {
 afterAll(() => {
     return service_broker_1.shutdown();
 });
-test("echo service", async () => {
-    await expect(service_broker_1.request({ name: "echo" }, { payload: "hello, world!" })).resolves.toHaveProperty("payload", "hello, world!");
+test("test only", async () => {
+    const res = await service_broker_1.request({ name: "service-manager" }, { header: { method: "listServices", siteName: "jupiter" } });
+    console.log(res.header);
 });

@@ -9,6 +9,7 @@ afterAll(() => {
 })
 
 
-test("echo service", async () => {
-  await expect(request({name: "echo"}, {payload: "hello, world!"})).resolves.toHaveProperty("payload", "hello, world!");
+test("test only", async () => {
+  const res = await request({name: "service-manager"}, {header: {method: "listServices", siteName: "jupiter"}});
+  console.log(res.header);
 })

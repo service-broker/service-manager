@@ -1,7 +1,7 @@
 {
-  "name": "service-boilerplate",
+  "name": "service-manager",
   "version": "1.0.0",
-  "description": "Boilerplate for service providers and clients.",
+  "description": "Provides API for deploying, configuring, and managing services.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -10,14 +10,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ken107/service-boilerplate.git"
+    "url": "git+https://github.com/ken107/service-manager.git"
   },
   "author": "Hai Phan <hai.phan@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/ken107/service-boilerplate/issues"
+    "url": "https://github.com/ken107/service-manager/issues"
   },
-  "homepage": "https://github.com/ken107/service-boilerplate#readme",
+  "homepage": "https://github.com/ken107/service-manager#readme",
   "devDependencies": {
     "@types/dotenv": "^4.0.3",
     "@types/jest": "^23.3.1",
