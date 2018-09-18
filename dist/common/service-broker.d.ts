@@ -25,5 +25,6 @@ export declare function requestTo(endpointId: string, serviceName: string, req: 
 export declare function notifyTo(endpointId: string, serviceName: string, msg: Message): Promise<void>;
 export declare function publish(topic: string, text: string): Promise<void>;
 export declare function subscribe(topic: string, handler: (text: string) => void): Promise<void>;
+export declare function unsubscribe(topic: string): Promise<void>;
 export declare function status(): Promise<any>;
 export declare function shutdown(): Promise<void>;

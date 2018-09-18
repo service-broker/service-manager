@@ -339,6 +339,10 @@ export async function subscribe(topic: string, handler: (text: string) => void) 
   });
 }
 
+export async function unsubscribe(topic: string) {
+  await unadvertise("#"+topic);
+}
+
 
 
 

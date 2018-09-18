@@ -319,6 +319,10 @@ async function subscribe(topic, handler) {
     });
 }
 exports.subscribe = subscribe;
+async function unsubscribe(topic) {
+    await unadvertise("#" + topic);
+}
+exports.unsubscribe = unsubscribe;
 async function status() {
     const id = String(++pendingIdGen);
     const promise = pendingResponse(id);
