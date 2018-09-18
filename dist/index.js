@@ -76,6 +76,8 @@ function onRequest(req) {
         return updateServiceConf(args.siteName, args.serviceName, args.serviceConf);
     else if (method == "addTopic")
         return addTopic(args.topicName, args.historySize);
+    else if (method == "removeTopic")
+        return removeTopic(args.topicName);
     else if (method == "subscribeTopic")
         return subscribeTopic(client, args.topicName);
     else if (method == "unsubscribeTopic")
@@ -336,15 +338,21 @@ function serviceCheckIn(siteName, serviceName, pid, endpointId) {
     }
     return {};
 }
-function addTopic(topicName, historySize) {
+async function addTopic(topicName, historySize) {
     assert(topicName && historySize, "Missing args");
     assert(!state.topics[topicName], "Topic already exists");
-    const topic = state.topics[topicName] = {
-        topicName,
-        historySize,
-    };
+    const topic = { topicName, historySize };
+    await service_broker_1.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
+    state.topics[topicName] = topic;
     broadcastStateUpdate({ op: "add", path: `/topics/${topicName}`, value: state.topics[topicName] });
-    service_broker_1.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
+    return {};
+}
+async function removeTopic(topicName) {
+    assert(topicName, "Missing args");
+    assert(state.topics[topicName], "Topic not exists");
+    await service_broker_1.unsubscribe(topicName);
+    delete state.topics[topicName];
+    broadcastStateUpdate({ op: "remove", path: `/topics/${topicName}` });
     return {};
 }
 function subscribeTopic(client, topicName) {

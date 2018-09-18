@@ -3,7 +3,7 @@ import * as fs from "fs"
 import { execFile, spawn, ChildProcess } from "child_process"
 import { promisify } from "util"
 import * as dotenv from "dotenv"
-import { advertise, requestTo, subscribe, Message, notifyTo } from "./common/service-broker"
+import { advertise, requestTo, subscribe, Message, notifyTo, unsubscribe } from "./common/service-broker"
 import { addShutdownHandler } from "./common/service-manager"
 import logger from "./common/logger"
 import config from "./config"
@@ -107,6 +107,7 @@ function onRequest(req: Message): Message|Promise<Message> {
   else if (method == "getServiceConf") return getServiceConf(args.siteName, args.serviceName);
   else if (method == "updateServiceConf") return updateServiceConf(args.siteName, args.serviceName, args.serviceConf);
   else if (method == "addTopic") return addTopic(args.topicName, args.historySize);
+  else if (method == "removeTopic") return removeTopic(args.topicName);
   else if (method == "subscribeTopic") return subscribeTopic(client, args.topicName);
   else if (method == "unsubscribeTopic") return unsubscribeTopic(client);
   else throw new Error("Unknown method " + method);
@@ -415,17 +416,26 @@ function serviceCheckIn(siteName: string, serviceName: string, pid: string, endp
 }
 
 
-function addTopic(topicName: string, historySize: number): Message {
+async function addTopic(topicName: string, historySize: number): Promise<Message> {
   assert(topicName && historySize, "Missing args");
   assert(!state.topics[topicName], "Topic already exists");
 
-  const topic = state.topics[topicName] = {
-    topicName,
-    historySize,
-  };
-  broadcastStateUpdate({op: "add", path: `/topics/${topicName}`, value: state.topics[topicName]});
+  const topic = {topicName, historySize};
+  await subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
 
-  subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
+  state.topics[topicName] = topic;
+  broadcastStateUpdate({op: "add", path: `/topics/${topicName}`, value: state.topics[topicName]});
+  return {};
+}
+
+async function removeTopic(topicName: string): Promise<Message> {
+  assert(topicName, "Missing args");
+  assert(state.topics[topicName], "Topic not exists");
+
+  await unsubscribe(topicName);
+
+  delete state.topics[topicName];
+  broadcastStateUpdate({op: "remove", path: `/topics/${topicName}`});
   return {};
 }
 
