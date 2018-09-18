@@ -226,6 +226,15 @@ export async function advertise(service: {name: string, capabilities?: string[],
   });
 }
 
+export async function unadvertise(serviceName: string) {
+  if (!providers[serviceName]) throw new Error(`${serviceName} provider not exists`);
+  delete providers[serviceName];
+  await send({
+    type: "SbAdvertiseRequest",
+    services: Object.values(providers).filter(x => x.advertise).map(x => x.service)
+  });
+}
+
 export function setServiceHandler(serviceName: string, handler: (msg: Message) => Message|Promise<Message>) {
   if (providers[serviceName]) throw new Error(`${serviceName} provider already exists`);
   providers[serviceName] = {

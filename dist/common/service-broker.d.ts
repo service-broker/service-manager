@@ -11,6 +11,7 @@ export declare function advertise(service: {
     capabilities?: string[];
     priority?: number;
 }, handler: (msg: Message) => Message | Promise<Message>): Promise<void>;
+export declare function unadvertise(serviceName: string): Promise<void>;
 export declare function setServiceHandler(serviceName: string, handler: (msg: Message) => Message | Promise<Message>): void;
 export declare function request(service: {
     name: string;

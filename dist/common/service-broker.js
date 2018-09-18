@@ -204,6 +204,16 @@ async function advertise(service, handler) {
     });
 }
 exports.advertise = advertise;
+async function unadvertise(serviceName) {
+    if (!providers[serviceName])
+        throw new Error(`${serviceName} provider not exists`);
+    delete providers[serviceName];
+    await send({
+        type: "SbAdvertiseRequest",
+        services: Object.values(providers).filter(x => x.advertise).map(x => x.service)
+    });
+}
+exports.unadvertise = unadvertise;
 function setServiceHandler(serviceName, handler) {
     if (providers[serviceName])
         throw new Error(`${serviceName} provider already exists`);
