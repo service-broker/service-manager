@@ -7,6 +7,7 @@ import { advertise, requestTo, subscribe, Message, notifyTo, unsubscribe } from 
 import { addShutdownHandler } from "./common/service-manager"
 import logger from "./common/logger"
 import config from "./config"
+import { tmpName } from "tmp"
 
 interface Site {
   siteName: string;
@@ -236,11 +237,11 @@ async function readServiceConf(site: Site, serviceName: string): Promise<{[name:
 }
 
 async function writeServiceConf(site: Site, serviceName: string, props: {[name: string]: string}): Promise<void> {
-  const commands = config.commands[site.operatingSystem];
-  const child = spawn("ssh", [site.hostName, interpolate(commands.writeServiceConf, {deployFolder: site.deployFolder, serviceName})]);
-  const promise = new Promise(fulfill => child.on("close", fulfill));
-  child.stdin.end(Object.keys(props).map(name => `${name}=${props[name]}`).join('\n'));
-  await promise;
+  const file = await new Promise((fulfill: (path: string) => void, reject) => tmpName((err, path) => err ? reject(err) : fulfill(path)));
+  const text = Object.keys(props).map(name => `${name}=${props[name]}`).join('\n');
+  await promisify(fs.writeFile)(file, text);
+  await scp(file, `${site.hostName}:${site.deployFolder}/${serviceName}/.env`);
+  await promisify(fs.unlink)(file);
 }
 
 
@@ -274,7 +275,7 @@ async function startService(siteName: string, serviceName: string): Promise<Mess
   await writeServiceConf(site, serviceName, props);
 
   const commands = config.commands[site.operatingSystem];
-  await ssh(site.hostName, interpolate(commands.startService, {deployFolder: site.deployFolder, serviceName}));
+  ssh(site.hostName, interpolate(commands.startService, {deployFolder: site.deployFolder, serviceName}));
   service.status = ServiceStatus.STARTING;
   broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
   return {};
@@ -293,17 +294,14 @@ async function stopService(siteName: string, serviceName: string): Promise<Messa
   service.status = ServiceStatus.STOPPING;
   broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
 
-  waitUntilStopped(site, service);
+  waitUntilStopped(site, service, 6);
   return {};
 }
 
-async function waitUntilStopped(site: Site, service: Service): Promise<void> {
+async function waitUntilStopped(site: Site, service: Service, timeout: number): Promise<void> {
   try {
     const commands = config.commands[site.operatingSystem];
-    for (let i=0; i<10; i++) {
-      await ssh(site.hostName, interpolate(commands.checkService, {pid: service.pid}));
-      await promisify(setTimeout)(3000);
-    }
+    await ssh(site.hostName, interpolate(commands.checkService, {pid: service.pid, timeout}));
   }
   catch (err) {
     service.status = ServiceStatus.STOPPED;
@@ -330,7 +328,7 @@ async function killService(siteName: string, serviceName: string): Promise<Messa
     broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
   }
 
-  waitUntilStopped(site, service);
+  waitUntilStopped(site, service, 3);
   return {};
 }
 
@@ -468,6 +466,10 @@ function onTopicMessage(topic: Topic, text: string) {
 
 function ssh(hostName: string, command:string) {
   return promisify(execFile)("ssh", ["-o", "BatchMode=yes", hostName, command]);
+}
+
+function scp(from: string, to: string) {
+  return promisify(execFile)("scp", ["-o", "BatchMode=yes", from, to]);
 }
 
 function interpolate(template: string, vars: {[key: string]: any}) {

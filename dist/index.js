@@ -9,6 +9,7 @@ const service_broker_1 = require("./common/service-broker");
 const service_manager_1 = require("./common/service-manager");
 const logger_1 = require("./common/logger");
 const config_1 = require("./config");
+const tmp_1 = require("tmp");
 var ServiceStatus;
 (function (ServiceStatus) {
     ServiceStatus["STOPPED"] = "STOPPED";
@@ -193,11 +194,11 @@ async function readServiceConf(site, serviceName) {
     return dotenv.parse(output.stdout);
 }
 async function writeServiceConf(site, serviceName, props) {
-    const commands = config_1.default.commands[site.operatingSystem];
-    const child = child_process_1.spawn("ssh", [site.hostName, interpolate(commands.writeServiceConf, { deployFolder: site.deployFolder, serviceName })]);
-    const promise = new Promise(fulfill => child.on("close", fulfill));
-    child.stdin.end(Object.keys(props).map(name => `${name}=${props[name]}`).join('\n'));
-    await promise;
+    const file = await new Promise((fulfill, reject) => tmp_1.tmpName((err, path) => err ? reject(err) : fulfill(path)));
+    const text = Object.keys(props).map(name => `${name}=${props[name]}`).join('\n');
+    await util_1.promisify(fs.writeFile)(file, text);
+    await scp(file, `${site.hostName}:${site.deployFolder}/${serviceName}/.env`);
+    await util_1.promisify(fs.unlink)(file);
 }
 async function undeployService(siteName, serviceName) {
     assert(siteName && serviceName, "Missing args");
@@ -224,7 +225,7 @@ async function startService(siteName, serviceName) {
     props.SERVICE_NAME = serviceName;
     await writeServiceConf(site, serviceName, props);
     const commands = config_1.default.commands[site.operatingSystem];
-    await ssh(site.hostName, interpolate(commands.startService, { deployFolder: site.deployFolder, serviceName }));
+    ssh(site.hostName, interpolate(commands.startService, { deployFolder: site.deployFolder, serviceName }));
     service.status = ServiceStatus.STARTING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
     return {};
@@ -239,16 +240,13 @@ async function stopService(siteName, serviceName) {
     await service_broker_1.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid } });
     service.status = ServiceStatus.STOPPING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
-    waitUntilStopped(site, service);
+    waitUntilStopped(site, service, 6);
     return {};
 }
-async function waitUntilStopped(site, service) {
+async function waitUntilStopped(site, service, timeout) {
     try {
         const commands = config_1.default.commands[site.operatingSystem];
-        for (let i = 0; i < 10; i++) {
-            await ssh(site.hostName, interpolate(commands.checkService, { pid: service.pid }));
-            await util_1.promisify(setTimeout)(3000);
-        }
+        await ssh(site.hostName, interpolate(commands.checkService, { pid: service.pid, timeout }));
     }
     catch (err) {
         service.status = ServiceStatus.STOPPED;
@@ -271,7 +269,7 @@ async function killService(siteName, serviceName) {
         service.status = ServiceStatus.STOPPING;
         broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
     }
-    waitUntilStopped(site, service);
+    waitUntilStopped(site, service, 3);
     return {};
 }
 async function viewServiceLogs(siteName, serviceName, lines) {
@@ -378,6 +376,9 @@ function onTopicMessage(topic, text) {
 }
 function ssh(hostName, command) {
     return util_1.promisify(child_process_1.execFile)("ssh", ["-o", "BatchMode=yes", hostName, command]);
+}
+function scp(from, to) {
+    return util_1.promisify(child_process_1.execFile)("scp", ["-o", "BatchMode=yes", from, to]);
 }
 function interpolate(template, vars) {
     for (const name in vars)

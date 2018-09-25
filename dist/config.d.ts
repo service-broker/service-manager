@@ -1,7 +1,6 @@
 export interface Commands {
     listServices: string;
     readServiceConf: string;
-    writeServiceConf: string;
     deployService: string;
     undeployService: string;
     startService: string;

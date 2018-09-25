@@ -23,12 +23,14 @@
     "@types/jest": "^23.3.1",
     "@types/node": "^10.9.2",
     "@types/p-timeout": "^1.2.1",
+    "@types/tmp": "0.0.33",
     "@types/ws": "^6.0.0",
     "typescript": "^3.0.1"
   },
   "dependencies": {
     "dotenv": "^6.0.0",
     "p-timeout": "^2.0.1",
+    "tmp": "0.0.33",
     "ws": "^6.0.0"
   }
 }
