@@ -24,7 +24,7 @@ exports.default = {
             deployService: "cd ${deployFolder} && git clone ${repoUrl} ${serviceName} && cd ${serviceName} && npm i --only=prod --no-save",
             undeployService: "rmdir /S /Q ${deployFolder}\\${serviceName}",
             startService: "cd ${deployFolder}\\${serviceName} && npm start 1>stdout.log 2>stderr.log",
-            killService: "taskkill /F ${pid}",
+            killService: "taskkill /F /PID ${pid}",
             checkService: "powershell Wait-Process -Id ${pid} -Timeout ${timeout}; Get-Process -Id ${pid}",
             updateService: "cd ${deployFolder}\\${serviceName} && git pull && npm i --only=prod --no-save",
             viewServiceLogs: "cd ${deployFolder}\\${serviceName} && (if not exist stdout.log copy NUL stdout.log) && (if not exist stderr.log copy NUL stderr.log) && powershell Get-Content -Tail ${lines} stdout.log && powershell Get-Content -Tail ${lines} stderr.log 1>&2",
