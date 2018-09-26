@@ -124,15 +124,17 @@ async function addSite(siteName, hostName, deployFolder, serviceBrokerUrl) {
     if (deployFolder.endsWith("/"))
         deployFolder = deployFolder.slice(0, -1);
     const operatingSystem = await getOperatingSystem(hostName);
-    state.sites[siteName] = {
+    const site = {
         siteName,
         hostName,
         operatingSystem,
         deployFolder,
         serviceBrokerUrl,
-        services: await getDeployedServices(hostName, operatingSystem, deployFolder)
+        services: null
     };
-    broadcastStateUpdate({ op: "add", path: `/sites/${siteName}`, value: state.sites[siteName] });
+    site.services = await getDeployedServices(site);
+    state.sites[siteName] = site;
+    broadcastStateUpdate({ op: "add", path: `/sites/${siteName}`, value: site });
     return {};
 }
 async function getOperatingSystem(hostName) {
@@ -144,20 +146,23 @@ async function getOperatingSystem(hostName) {
         return "windows";
     }
 }
-async function getDeployedServices(hostName, operatingSystem, deployFolder) {
-    const commands = config_1.default.commands[operatingSystem];
-    let output = await ssh(hostName, interpolate(commands.listServices, { deployFolder }));
+async function getDeployedServices(site) {
+    const commands = config_1.default.commands[site.operatingSystem];
+    let output = await ssh(site.hostName, interpolate(commands.listServices, { deployFolder: site.deployFolder }));
     output.stdout = output.stdout.trim();
     const serviceNames = output.stdout ? output.stdout.split(/\s+/) : [];
     const services = {};
     for (const serviceName of serviceNames) {
-        output = await ssh(hostName, interpolate(commands.readServiceConf, { deployFolder, serviceName }));
-        const envInfo = dotenv.parse(output.stdout);
+        const envInfo = await readServiceConf(site, serviceName);
         services[serviceName] = {
             serviceName,
             repoUrl: envInfo.REPO_URL,
             status: ServiceStatus.STOPPED
         };
+        if (envInfo.SITE_NAME != site.siteName) {
+            envInfo.SITE_NAME = site.siteName;
+            await writeServiceConf(site, serviceName, envInfo);
+        }
     }
     return services;
 }
