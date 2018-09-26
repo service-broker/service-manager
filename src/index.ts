@@ -220,7 +220,12 @@ async function deployService(siteName: string, serviceName: string, repoUrl: str
 
   const commands = config.commands[site.operatingSystem];
   let output = await ssh(site.hostName, interpolate(commands.deployService, {deployFolder: site.deployFolder, serviceName, repoUrl}));
-  await writeServiceConf(site, serviceName, {REPO_URL: repoUrl, SERVICE_BROKER_URL: site.serviceBrokerUrl});
+  await writeServiceConf(site, serviceName, {
+    REPO_URL: repoUrl,
+    SERVICE_BROKER_URL: site.serviceBrokerUrl,
+    SITE_NAME: siteName,
+    SERVICE_NAME: serviceName,
+  })
   site.services[serviceName] = {
     serviceName,
     repoUrl,
@@ -268,11 +273,6 @@ async function startService(siteName: string, serviceName: string): Promise<Mess
   const service = site.services[serviceName];
   assert(service, "Service not exists");
   assert(service.status == ServiceStatus.STOPPED, "Service not stopped");
-
-  const props = await readServiceConf(site, serviceName);
-  props.SITE_NAME = siteName;
-  props.SERVICE_NAME = serviceName;
-  await writeServiceConf(site, serviceName, props);
 
   const commands = config.commands[site.operatingSystem];
   ssh(site.hostName, interpolate(commands.startService, {deployFolder: site.deployFolder, serviceName}));
