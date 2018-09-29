@@ -6,25 +6,45 @@ export interface Message {
     };
     payload?: string | Buffer | Readable;
 }
-export declare function advertise(service: {
-    name: string;
-    capabilities?: string[];
-    priority?: number;
-}, handler: (msg: Message) => Message | Promise<Message>): Promise<void>;
-export declare function unadvertise(serviceName: string): Promise<void>;
-export declare function setServiceHandler(serviceName: string, handler: (msg: Message) => Message | Promise<Message>): void;
-export declare function request(service: {
-    name: string;
-    capabilities?: string[];
-}, req: Message, timeout?: number): Promise<Message>;
-export declare function notify(service: {
-    name: string;
-    capabilities?: string[];
-}, msg: Message): Promise<void>;
-export declare function requestTo(endpointId: string, serviceName: string, req: Message, timeout?: number): Promise<Message>;
-export declare function notifyTo(endpointId: string, serviceName: string, msg: Message): Promise<void>;
-export declare function publish(topic: string, text: string): Promise<void>;
-export declare function subscribe(topic: string, handler: (text: string) => void): Promise<void>;
-export declare function unsubscribe(topic: string): Promise<void>;
-export declare function status(): Promise<any>;
-export declare function shutdown(): Promise<void>;
+export declare class ServiceBroker {
+    private url;
+    private readonly providers;
+    private readonly pending;
+    private pendingIdGen;
+    private readonly getConnection;
+    private shutdownFlag;
+    constructor(url: string);
+    private connect;
+    private onMessage;
+    private onServiceRequest;
+    private onServiceResponse;
+    private messageFromString;
+    private messageFromBuffer;
+    private send;
+    private packetizer;
+    advertise(service: {
+        name: string;
+        capabilities?: string[];
+        priority?: number;
+    }, handler: (msg: Message) => Message | Promise<Message>): Promise<void>;
+    unadvertise(serviceName: string): Promise<void>;
+    setServiceHandler(serviceName: string, handler: (msg: Message) => Message | Promise<Message>): void;
+    request(service: {
+        name: string;
+        capabilities?: string[];
+    }, req: Message, timeout?: number): Promise<Message>;
+    notify(service: {
+        name: string;
+        capabilities?: string[];
+    }, msg: Message): Promise<void>;
+    requestTo(endpointId: string, serviceName: string, req: Message, timeout?: number): Promise<Message>;
+    notifyTo(endpointId: string, serviceName: string, msg: Message): Promise<void>;
+    private pendingResponse;
+    publish(topic: string, text: string): Promise<void>;
+    subscribe(topic: string, handler: (text: string) => void): Promise<void>;
+    unsubscribe(topic: string): Promise<void>;
+    status(): Promise<any>;
+    shutdown(): Promise<void>;
+}
+declare const defaultServiceBroker: ServiceBroker;
+export default defaultServiceBroker;

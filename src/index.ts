@@ -5,7 +5,7 @@ import * as fs from "fs";
 import { tmpName } from "tmp";
 import { promisify } from "util";
 import logger from "./common/logger";
-import { advertise, Message, notifyTo, requestTo, subscribe, unsubscribe } from "./common/service-broker";
+import sb, { Message } from "./common/service-broker";
 import { addShutdownHandler } from "./common/service-manager";
 import config from "./config";
 
@@ -64,7 +64,7 @@ const clients: {[endpointId: string]: Client} = {};
 const state: State = loadState();
 const topicHistory: {[key: string]: string[]} = {};
 
-for (const topic of Object.values(state.topics)) subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
+for (const topic of Object.values(state.topics)) sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
 setInterval(saveState, config.saveStateInterval);
 setInterval(clientsKeepAlive, config.clientsKeepAliveInterval);
 
@@ -83,7 +83,7 @@ function saveState() {
 }
 
 
-advertise(config.service, onRequest)
+sb.advertise(config.service, onRequest)
   .then(() => logger.info(config.service.name + " service started"))
 addShutdownHandler(onShutdown);
 
@@ -128,7 +128,7 @@ function clientLogin(password: string, endpointId: string): Message {
 
 function broadcastStateUpdate(patch: Patch) {
   Object.values(clients).forEach(client => {
-    notifyTo(client.endpointId, "service-manager-client", {
+    sb.notifyTo(client.endpointId, "service-manager-client", {
       header: {method: "onStateUpdate"},
       payload: JSON.stringify([patch])
     })
@@ -137,7 +137,7 @@ function broadcastStateUpdate(patch: Patch) {
 
 function clientsKeepAlive() {
   for (const client of Object.values(clients)) {
-    requestTo(client.endpointId, "service-manager-client", {header: {method: "ping"}})
+    sb.requestTo(client.endpointId, "service-manager-client", {header: {method: "ping"}})
       .catch(err => onClientError(client, err))
   }
 }
@@ -308,7 +308,7 @@ async function stopService(siteName: string, serviceName: string): Promise<Messa
   assert(service, "Service not exists");
   assert(service.status == ServiceStatus.STARTED, "Service not started");
 
-  await requestTo(service.endpointId, "service-manager-client", {header: {method: "shutdown", pid: service.pid}});
+  await sb.requestTo(service.endpointId, "service-manager-client", {header: {method: "shutdown", pid: service.pid}});
   service.status = ServiceStatus.STOPPING;
   broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
 
@@ -433,7 +433,7 @@ async function addTopic(topicName: string, historySize: number): Promise<Message
   assert(!state.topics[topicName], "Topic already exists");
 
   const topic = {topicName, historySize};
-  await subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
+  await sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
 
   state.topics[topicName] = topic;
   broadcastStateUpdate({op: "add", path: `/topics/${topicName}`, value: state.topics[topicName]});
@@ -444,7 +444,7 @@ async function removeTopic(topicName: string): Promise<Message> {
   assert(topicName, "Missing args");
   assert(state.topics[topicName], "Topic not exists");
 
-  await unsubscribe(topicName);
+  await sb.unsubscribe(topicName);
 
   delete state.topics[topicName];
   broadcastStateUpdate({op: "remove", path: `/topics/${topicName}`});
@@ -472,7 +472,7 @@ function onTopicMessage(topic: Topic, text: string) {
 
   Object.values(clients).forEach(client => {
     if (client.viewTopic == topic.topicName)
-      notifyTo(client.endpointId, "service-manager-client", {header: {method: "onTopicMessage"}, payload: text});
+      sb.notifyTo(client.endpointId, "service-manager-client", {header: {method: "onTopicMessage"}, payload: text});
   })
 }
 

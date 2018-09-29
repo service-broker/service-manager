@@ -1,15 +1,10 @@
-import { request, Message, shutdown } from "./common/service-broker"
+import sb from "./common/service-broker"
+import "./index"
 
-beforeAll(() => {
-  require("./index");
-})
-
-afterAll(() => {
-  return shutdown();
-})
+afterAll(() => sb.shutdown());
 
 
 test("test only", async () => {
-  const res = await request({name: "service-manager"}, {header: {method: "listServices", siteName: "jupiter"}});
+  const res = await sb.request({name: "service-manager"}, {header: {method: "listServices", siteName: "jupiter"}});
   console.log(res.header);
 })

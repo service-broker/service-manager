@@ -23,7 +23,7 @@ const clients = {};
 const state = loadState();
 const topicHistory = {};
 for (const topic of Object.values(state.topics))
-    service_broker_1.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
+    service_broker_1.default.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
 setInterval(saveState, config_1.default.saveStateInterval);
 setInterval(clientsKeepAlive, config_1.default.clientsKeepAliveInterval);
 function loadState() {
@@ -38,7 +38,7 @@ function loadState() {
 function saveState() {
     fs.writeFile("state.json", JSON.stringify(state), err => err && console.error(err));
 }
-service_broker_1.advertise(config_1.default.service, onRequest)
+service_broker_1.default.advertise(config_1.default.service, onRequest)
     .then(() => logger_1.default.info(config_1.default.service.name + " service started"));
 service_manager_1.addShutdownHandler(onShutdown);
 function onRequest(req) {
@@ -100,7 +100,7 @@ function clientLogin(password, endpointId) {
 }
 function broadcastStateUpdate(patch) {
     Object.values(clients).forEach(client => {
-        service_broker_1.notifyTo(client.endpointId, "service-manager-client", {
+        service_broker_1.default.notifyTo(client.endpointId, "service-manager-client", {
             header: { method: "onStateUpdate" },
             payload: JSON.stringify([patch])
         });
@@ -108,7 +108,7 @@ function broadcastStateUpdate(patch) {
 }
 function clientsKeepAlive() {
     for (const client of Object.values(clients)) {
-        service_broker_1.requestTo(client.endpointId, "service-manager-client", { header: { method: "ping" } })
+        service_broker_1.default.requestTo(client.endpointId, "service-manager-client", { header: { method: "ping" } })
             .catch(err => onClientError(client, err));
     }
 }
@@ -254,7 +254,7 @@ async function stopService(siteName, serviceName) {
     const service = site.services[serviceName];
     assert(service, "Service not exists");
     assert(service.status == ServiceStatus.STARTED, "Service not started");
-    await service_broker_1.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid } });
+    await service_broker_1.default.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid } });
     service.status = ServiceStatus.STOPPING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
     waitUntilStopped(site, service, 6);
@@ -353,7 +353,7 @@ async function addTopic(topicName, historySize) {
     assert(topicName && historySize, "Missing args");
     assert(!state.topics[topicName], "Topic already exists");
     const topic = { topicName, historySize };
-    await service_broker_1.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
+    await service_broker_1.default.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
     state.topics[topicName] = topic;
     broadcastStateUpdate({ op: "add", path: `/topics/${topicName}`, value: state.topics[topicName] });
     return {};
@@ -361,7 +361,7 @@ async function addTopic(topicName, historySize) {
 async function removeTopic(topicName) {
     assert(topicName, "Missing args");
     assert(state.topics[topicName], "Topic not exists");
-    await service_broker_1.unsubscribe(topicName);
+    await service_broker_1.default.unsubscribe(topicName);
     delete state.topics[topicName];
     broadcastStateUpdate({ op: "remove", path: `/topics/${topicName}` });
     return {};
@@ -384,7 +384,7 @@ function onTopicMessage(topic, text) {
         history.shift();
     Object.values(clients).forEach(client => {
         if (client.viewTopic == topic.topicName)
-            service_broker_1.notifyTo(client.endpointId, "service-manager-client", { header: { method: "onTopicMessage" }, payload: text });
+            service_broker_1.default.notifyTo(client.endpointId, "service-manager-client", { header: { method: "onTopicMessage" }, payload: text });
     });
 }
 function ssh(hostName, command) {

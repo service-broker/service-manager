@@ -1,27 +1,24 @@
-import * as sb from "./service-broker"
-import logger from "./logger"
-import config from "../config"
+import config from "../config";
+import logger from "./logger";
+import sb, { Message } from "./service-broker";
 
 let checkInTimer: NodeJS.Timer;
 const shutdownHandlers: Array<() => Promise<void>> = [];
 
 sb.setServiceHandler("service-manager-client", onRequest);
-if (config.siteName && config.serviceName) {
-  checkIn();
-  checkInTimer = setInterval(checkIn, 30*1000);
-}
+if (config.siteName && config.serviceName) checkIn();
 
 
 
-function onRequest(req: sb.Message): Promise<sb.Message> {
+function onRequest(req: Message): Promise<Message> {
   if (req.header.method == "shutdown") return shutdown(req);
   else throw new Error("Unknown method " + req.header.method);
 }
 
-async function shutdown(req: sb.Message): Promise<sb.Message> {
+async function shutdown(req: Message): Promise<Message> {
   if (req.header.pid != process.pid) throw new Error("pid incorrect");
   for (const handler of shutdownHandlers) await handler();
-  clearInterval(checkInTimer);
+  clearTimeout(checkInTimer);
   setTimeout(sb.shutdown, 1000);
   return {};
 }
@@ -38,6 +35,7 @@ function checkIn() {
     }
   })
   .catch(logger.error)
+  .then(() => checkInTimer = setTimeout(checkIn, 30*1000))
 }
 
 

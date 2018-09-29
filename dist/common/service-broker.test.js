@@ -1,30 +1,31 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const sb = require("./service-broker");
+const service_broker_1 = require("./service-broker");
 afterAll(() => {
-    sb.shutdown();
+    service_broker_1.default.shutdown();
 });
 test("pub/sub", async () => {
     const queue = new Queue();
-    sb.subscribe("test-log", msg => queue.push(msg));
-    sb.publish("test-log", "what in the world");
+    service_broker_1.default.subscribe("test-log", msg => queue.push(msg));
+    service_broker_1.default.publish("test-log", "what in the world");
     expect(await queue.shift()).toBe("what in the world");
 });
 test("request/response", async () => {
     const queue = new Queue();
-    sb.advertise({ name: "test-tts", capabilities: ["v1", "v2"], priority: 1 }, msg => {
+    service_broker_1.default.advertise({ name: "test-tts", capabilities: ["v1", "v2"], priority: 1 }, msg => {
         queue.push(msg);
         return {
             header: { result: 1 },
             payload: Buffer.from("this is response payload")
         };
     });
-    let promise = sb.request({ name: "test-tts", capabilities: ["v1"] }, {
+    let promise = service_broker_1.default.request({ name: "test-tts", capabilities: ["v1"] }, {
         header: { lang: "vi" },
         payload: "this is request payload"
     });
     expect(await queue.shift()).toEqual({
         header: {
+            ip: expect.any(String),
             from: expect.any(String),
             id: expect.any(String),
             type: "ServiceRequest",
@@ -49,19 +50,20 @@ test("request/response", async () => {
     });
     //test setServiceHandler, requestTo, notifyTo
     const endpointId = res.header.from;
-    sb.setServiceHandler("test-direct", msg => {
+    service_broker_1.default.setServiceHandler("test-direct", msg => {
         queue.push(msg);
         return {
             header: { output: "crap" },
             payload: Buffer.from("Direct response payload")
         };
     });
-    promise = sb.requestTo(endpointId, "test-direct", {
+    promise = service_broker_1.default.requestTo(endpointId, "test-direct", {
         header: { value: 100 },
         payload: "Direct request payload"
     });
     expect(await queue.shift()).toEqual({
         header: {
+            ip: expect.any(String),
             to: endpointId,
             from: expect.any(String),
             id: expect.any(String),
@@ -81,12 +83,13 @@ test("request/response", async () => {
         },
         payload: Buffer.from("Direct response payload")
     });
-    sb.notifyTo(endpointId, "test-direct", {
+    service_broker_1.default.notifyTo(endpointId, "test-direct", {
         header: { value: 200 },
         payload: Buffer.from("Direct notify payload")
     });
     expect(await queue.shift()).toEqual({
         header: {
+            ip: expect.any(String),
             to: endpointId,
             from: expect.any(String),
             type: "ServiceRequest",
@@ -97,7 +100,7 @@ test("request/response", async () => {
     });
     //test no-provider
     try {
-        await sb.request({ name: "test-tts", capabilities: ["v3"] }, {
+        await service_broker_1.default.request({ name: "test-tts", capabilities: ["v3"] }, {
             header: { lang: "en" },
             payload: "this is request payload"
         });
