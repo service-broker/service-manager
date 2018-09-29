@@ -1,13 +1,13 @@
-import * as assert from "assert"
-import * as fs from "fs"
-import { execFile, spawn, ChildProcess } from "child_process"
-import { promisify } from "util"
-import * as dotenv from "dotenv"
-import { advertise, requestTo, subscribe, Message, notifyTo, unsubscribe } from "./common/service-broker"
-import { addShutdownHandler } from "./common/service-manager"
-import logger from "./common/logger"
-import config from "./config"
-import { tmpName } from "tmp"
+import * as assert from "assert";
+import { ChildProcess, execFile } from "child_process";
+import * as dotenv from "dotenv";
+import * as fs from "fs";
+import { tmpName } from "tmp";
+import { promisify } from "util";
+import logger from "./common/logger";
+import { advertise, Message, notifyTo, requestTo, subscribe, unsubscribe } from "./common/service-broker";
+import { addShutdownHandler } from "./common/service-manager";
+import config from "./config";
 
 interface Site {
   siteName: string;
@@ -281,10 +281,22 @@ async function startService(siteName: string, serviceName: string): Promise<Mess
   assert(service.status == ServiceStatus.STOPPED, "Service not stopped");
 
   const commands = config.commands[site.operatingSystem];
-  ssh(site.hostName, interpolate(commands.startService, {deployFolder: site.deployFolder, serviceName}));
+  ssh(site.hostName, interpolate(commands.startService, {deployFolder: site.deployFolder, serviceName}))
+    .catch(err => "OK")
+    .then(() => setStopped(site, service))
+
   service.status = ServiceStatus.STARTING;
   broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
   return {};
+}
+
+function setStopped(site: Site, service: Service) {
+  if (service.status == ServiceStatus.STOPPED) return;
+  service.status = ServiceStatus.STOPPED;
+  service.pid = null;
+  service.endpointId = null;
+  service.lastCheckedIn = null;
+  broadcastStateUpdate({op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service});
 }
 
 
@@ -310,11 +322,7 @@ async function waitUntilStopped(site: Site, service: Service, timeout: number): 
     await ssh(site.hostName, interpolate(commands.checkService, {pid: service.pid, timeout}));
   }
   catch (err) {
-    service.status = ServiceStatus.STOPPED;
-    service.pid = null;
-    service.endpointId = null;
-    service.lastCheckedIn = null;
-    broadcastStateUpdate({op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service});
+    setStopped(site, service);
   }
 }
 

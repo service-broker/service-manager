@@ -1,15 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const assert = require("assert");
-const fs = require("fs");
 const child_process_1 = require("child_process");
-const util_1 = require("util");
 const dotenv = require("dotenv");
+const fs = require("fs");
+const tmp_1 = require("tmp");
+const util_1 = require("util");
+const logger_1 = require("./common/logger");
 const service_broker_1 = require("./common/service-broker");
 const service_manager_1 = require("./common/service-manager");
-const logger_1 = require("./common/logger");
 const config_1 = require("./config");
-const tmp_1 = require("tmp");
 var ServiceStatus;
 (function (ServiceStatus) {
     ServiceStatus["STOPPED"] = "STOPPED";
@@ -231,10 +231,21 @@ async function startService(siteName, serviceName) {
     assert(service, "Service not exists");
     assert(service.status == ServiceStatus.STOPPED, "Service not stopped");
     const commands = config_1.default.commands[site.operatingSystem];
-    ssh(site.hostName, interpolate(commands.startService, { deployFolder: site.deployFolder, serviceName }));
+    ssh(site.hostName, interpolate(commands.startService, { deployFolder: site.deployFolder, serviceName }))
+        .catch(err => "OK")
+        .then(() => setStopped(site, service));
     service.status = ServiceStatus.STARTING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
     return {};
+}
+function setStopped(site, service) {
+    if (service.status == ServiceStatus.STOPPED)
+        return;
+    service.status = ServiceStatus.STOPPED;
+    service.pid = null;
+    service.endpointId = null;
+    service.lastCheckedIn = null;
+    broadcastStateUpdate({ op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service });
 }
 async function stopService(siteName, serviceName) {
     assert(siteName && serviceName, "Missing args");
@@ -255,11 +266,7 @@ async function waitUntilStopped(site, service, timeout) {
         await ssh(site.hostName, interpolate(commands.checkService, { pid: service.pid, timeout }));
     }
     catch (err) {
-        service.status = ServiceStatus.STOPPED;
-        service.pid = null;
-        service.endpointId = null;
-        service.lastCheckedIn = null;
-        broadcastStateUpdate({ op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service });
+        setStopped(site, service);
     }
 }
 async function killService(siteName, serviceName) {
