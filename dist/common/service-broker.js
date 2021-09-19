@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.ServiceBroker = void 0;
 const pTimeout = require("p-timeout");
 const stream_1 = require("stream");
 const WebSocket = require("ws");
@@ -23,8 +24,12 @@ class ServiceBroker {
         this.providers = {};
         this.pending = {};
         this.pendingIdGen = 0;
-        this.getConnection = new iterator_1.default(() => this.connect()).throttle(15000).keepWhile(con => con && !con.isClosed).noRace().next;
+        this.conIter = new iterator_1.default(() => this.connect()).throttle(15000).keepWhile(con => con != null && !con.isClosed).noRace();
         this.shutdownFlag = false;
+    }
+    async getConnection() {
+        const con = await this.conIter.next();
+        return con;
     }
     async connect() {
         try {
@@ -53,7 +58,7 @@ class ServiceBroker {
             return ws;
         }
         catch (err) {
-            logger_1.default.error("Failed to connect to service broker,", err.message);
+            logger_1.default.error("Failed to connect to service broker,", String(err));
             return null;
         }
     }
@@ -68,7 +73,7 @@ class ServiceBroker {
                 throw new Error("Message is not a string or Buffer");
         }
         catch (err) {
-            logger_1.default.error(err.message);
+            logger_1.default.error(String(err));
             return;
         }
         if (msg.header.type == "ServiceRequest")
@@ -76,6 +81,8 @@ class ServiceBroker {
         else if (msg.header.type == "ServiceResponse")
             this.onServiceResponse(msg);
         else if (msg.header.type == "SbStatusResponse")
+            this.onServiceResponse(msg);
+        else if (msg.header.type == "SbEndpointWaitResponse")
             this.onServiceResponse(msg);
         else if (msg.header.error)
             this.onServiceResponse(msg);
@@ -106,11 +113,11 @@ class ServiceBroker {
                     to: msg.header.from,
                     id: msg.header.id,
                     type: "ServiceResponse",
-                    error: err.message
+                    error: String(err)
                 });
             }
             else
-                logger_1.default.error(err.message, msg.header);
+                logger_1.default.error(String(err), msg.header);
         }
     }
     onServiceResponse(msg) {
@@ -238,8 +245,6 @@ class ServiceBroker {
     }
     async request(service, req, timeout) {
         assert(service && service.name && req, "Missing args");
-        if (!req)
-            req = {};
         const id = String(++this.pendingIdGen);
         const promise = this.pendingResponse(id, timeout);
         const header = {
@@ -252,8 +257,6 @@ class ServiceBroker {
     }
     async notify(service, msg) {
         assert(service && service.name && msg, "Missing args");
-        if (!msg)
-            msg = {};
         const header = {
             type: "ServiceRequest",
             service
@@ -262,8 +265,6 @@ class ServiceBroker {
     }
     async requestTo(endpointId, serviceName, req, timeout) {
         assert(endpointId && serviceName && req, "Missing args");
-        if (!req)
-            req = {};
         const id = String(++this.pendingIdGen);
         const promise = this.pendingResponse(id, timeout);
         const header = {
@@ -277,8 +278,6 @@ class ServiceBroker {
     }
     async notifyTo(endpointId, serviceName, msg) {
         assert(endpointId && serviceName && msg, "Missing args");
-        if (!msg)
-            msg = {};
         const header = {
             to: endpointId,
             type: "ServiceRequest",
@@ -325,10 +324,7 @@ class ServiceBroker {
     }
     async subscribe(topic, handler) {
         assert(topic && handler, "Missing args");
-        await this.advertise({ name: "#" + topic }, (msg) => {
-            handler(msg.payload);
-            return null;
-        });
+        await this.advertise({ name: "#" + topic }, (msg) => handler(msg.payload));
     }
     async unsubscribe(topic) {
         assert(topic, "Missing args");
@@ -336,12 +332,14 @@ class ServiceBroker {
     }
     async status() {
         const id = String(++this.pendingIdGen);
-        const promise = this.pendingResponse(id);
-        await this.send({
-            id,
-            type: "SbStatusRequest"
-        });
-        return promise.then(res => JSON.parse(res.payload));
+        await this.send({ id, type: "SbStatusRequest" });
+        const res = await this.pendingResponse(id);
+        return JSON.parse(res.payload);
+    }
+    async waitEndpoint(endpointId) {
+        const id = String(++this.pendingIdGen);
+        await this.send({ id, type: "SbEndpointWaitRequest", endpointId });
+        await this.pendingResponse(id, Infinity);
     }
     async shutdown() {
         this.shutdownFlag = true;
@@ -350,6 +348,5 @@ class ServiceBroker {
     }
 }
 exports.ServiceBroker = ServiceBroker;
-assert(config_1.default.serviceBrokerUrl, "Missing config serviceBrokerUrl");
 const defaultServiceBroker = new ServiceBroker(config_1.default.serviceBrokerUrl);
 exports.default = defaultServiceBroker;

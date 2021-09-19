@@ -6,14 +6,20 @@ export interface Message {
     };
     payload?: string | Buffer | Readable;
 }
+export interface MessageWithHeader extends Message {
+    header: {
+        [key: string]: any;
+    };
+}
 export declare class ServiceBroker {
     private url;
     private readonly providers;
     private readonly pending;
     private pendingIdGen;
-    private readonly getConnection;
+    private readonly conIter;
     private shutdownFlag;
     constructor(url: string);
+    private getConnection;
     private connect;
     private onMessage;
     private onServiceRequest;
@@ -26,9 +32,9 @@ export declare class ServiceBroker {
         name: string;
         capabilities?: string[];
         priority?: number;
-    }, handler: (msg: Message) => Message | Promise<Message>): Promise<void>;
+    }, handler: (msg: MessageWithHeader) => Message | void | Promise<Message | void>): Promise<void>;
     unadvertise(serviceName: string): Promise<void>;
-    setServiceHandler(serviceName: string, handler: (msg: Message) => Message | Promise<Message>): void;
+    setServiceHandler(serviceName: string, handler: (msg: MessageWithHeader) => Message | void | Promise<Message | void>): void;
     request(service: {
         name: string;
         capabilities?: string[];
@@ -44,6 +50,7 @@ export declare class ServiceBroker {
     subscribe(topic: string, handler: (text: string) => void): Promise<void>;
     unsubscribe(topic: string): Promise<void>;
     status(): Promise<any>;
+    waitEndpoint(endpointId: string): Promise<void>;
     shutdown(): Promise<void>;
 }
 declare const defaultServiceBroker: ServiceBroker;

@@ -6,9 +6,9 @@ class Iterator {
         this.next = next;
     }
     noRace() {
-        let pending = Promise.resolve(null);
+        let pending;
         return new Iterator(() => {
-            return pending = pending.then(() => this.next());
+            return pending = Promise.resolve(pending).then(() => this.next());
         });
     }
     keepWhile(cond) {
@@ -25,7 +25,7 @@ class Iterator {
             const elapsed = Date.now() - lastTime;
             const remaining = delay - elapsed;
             if (remaining > 0)
-                await util_1.promisify(setTimeout)(remaining);
+                await (0, util_1.promisify)(setTimeout)(remaining);
             const value = await this.next();
             lastTime = Date.now();
             return value;

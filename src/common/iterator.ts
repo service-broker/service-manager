@@ -5,9 +5,9 @@ export default class Iterator<T> {
   }
 
   noRace(): Iterator<T> {
-    let pending: Promise<T> = Promise.resolve(null);
+    let pending: Promise<T>;
     return new Iterator(() => {
-      return pending = pending.then(() => this.next());
+      return pending = Promise.resolve(pending).then(() => this.next());
     });
   }
 

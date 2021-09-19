@@ -1,7 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv = require("dotenv");
+const assert = require("assert");
 dotenv.config();
+assert(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL");
+assert(process.env.PASSWORD, "Missing env PASSWORD");
 exports.default = {
     password: process.env.PASSWORD,
     saveStateInterval: 30 * 1000,
@@ -38,7 +41,6 @@ exports.default = {
     // the service provided by this module
     service: {
         name: "service-manager",
-        capabilities: null,
         priority: 100
     }
 };

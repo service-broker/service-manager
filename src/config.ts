@@ -1,6 +1,10 @@
 import * as dotenv from "dotenv"
+import * as assert from "assert"
 
 dotenv.config();
+
+assert(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL")
+assert(process.env.PASSWORD, "Missing env PASSWORD")
 
 export interface Commands {
   listServices: string;
@@ -54,7 +58,6 @@ export default {
   // the service provided by this module
   service: {
     name: "service-manager",
-    capabilities: <string[]> null,
     priority: 100
   }
 }

@@ -55,7 +55,7 @@ test("request/response", async () => {
   });
 
   //test setServiceHandler, requestTo, notifyTo
-  const endpointId = res.header.from;
+  const endpointId = res.header!.from;
   sb.setServiceHandler("test-direct", msg => {
     queue.push(msg);
     return {
@@ -112,7 +112,7 @@ test("request/response", async () => {
       payload: "this is request payload"
     });
   }
-  catch (err) {
+  catch (err: any) {
     expect(err.message).toMatch("No provider");
   }
 });
@@ -127,10 +127,10 @@ class Queue<T> {
   }
   push(value: T) {
     this.items.push(value);
-    while (this.items.length && this.waiters.length) this.waiters.shift().fulfill(this.items.shift());
+    while (this.items.length && this.waiters.length) this.waiters.shift()!.fulfill(this.items.shift()!);
   }
   shift(): T|Promise<T> {
-    if (this.items.length) return this.items.shift();
+    if (this.items.length) return this.items.shift()!;
     else return new Promise(fulfill => this.waiters.push({fulfill}));
   }
 }

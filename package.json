@@ -19,18 +19,16 @@
   },
   "homepage": "https://github.com/ken107/service-manager#readme",
   "devDependencies": {
-    "@types/dotenv": "^4.0.3",
-    "@types/jest": "^23.3.1",
-    "@types/node": "^10.9.2",
-    "@types/p-timeout": "^1.2.1",
-    "@types/tmp": "0.0.33",
-    "@types/ws": "^6.0.0",
-    "typescript": "^3.0.1"
+    "@types/jest": "^27.0.1",
+    "@types/node": "^16.9.2",
+    "@types/tmp": "^0.2.1",
+    "@types/ws": "^7.4.7",
+    "typescript": "^4.4.3"
   },
   "dependencies": {
-    "dotenv": "^6.0.0",
-    "p-timeout": "^2.0.1",
-    "tmp": "0.0.33",
-    "ws": "^6.0.0"
+    "dotenv": "^10.0.0",
+    "p-timeout": "^4.1.0",
+    "tmp": "^0.2.1",
+    "ws": "^7.5.3"
   }
 }

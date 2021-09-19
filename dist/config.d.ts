@@ -17,11 +17,10 @@ declare const _default: {
         [operatingSystem: string]: Commands;
     };
     serviceBrokerUrl: string;
-    siteName: string;
-    serviceName: string;
+    siteName: string | undefined;
+    serviceName: string | undefined;
     service: {
         name: string;
-        capabilities: string[];
         priority: number;
     };
 };

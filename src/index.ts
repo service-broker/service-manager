@@ -5,7 +5,7 @@ import * as fs from "fs";
 import { tmpName } from "tmp";
 import { promisify } from "util";
 import logger from "./common/logger";
-import sb, { Message } from "./common/service-broker";
+import sb, { Message, MessageWithHeader } from "./common/service-broker";
 import { addShutdownHandler } from "./common/service-manager";
 import config from "./config";
 
@@ -34,7 +34,7 @@ enum ServiceStatus {
   STARTING = "STARTING",
 }
 
-class Patch {
+interface Patch {
   op: string;
   path: string;
   value?: any;
@@ -87,7 +87,7 @@ sb.advertise(config.service, onRequest)
   .then(() => logger.info(config.service.name + " service started"))
 addShutdownHandler(onShutdown);
 
-function onRequest(req: Message): Message|Promise<Message> {
+function onRequest(req: MessageWithHeader): Message|Promise<Message> {
   const method = req.header.method;
   const args = req.header.args || {};
   if (method == "clientLogin") return clientLogin(args.password, req.header.from);
@@ -161,7 +161,7 @@ async function addSite(siteName: string, hostName: string, deployFolder: string,
     operatingSystem,
     deployFolder,
     serviceBrokerUrl,
-    services: null
+    services: {}
   };
   site.services = await getDeployedServices(site);
 
@@ -293,9 +293,9 @@ async function startService(siteName: string, serviceName: string): Promise<Mess
 function setStopped(site: Site, service: Service) {
   if (service.status == ServiceStatus.STOPPED) return;
   service.status = ServiceStatus.STOPPED;
-  service.pid = null;
-  service.endpointId = null;
-  service.lastCheckedIn = null;
+  service.pid = undefined;
+  service.endpointId = undefined;
+  service.lastCheckedIn = undefined;
   broadcastStateUpdate({op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service});
 }
 
@@ -307,6 +307,7 @@ async function stopService(siteName: string, serviceName: string): Promise<Messa
   const service = site.services[serviceName];
   assert(service, "Service not exists");
   assert(service.status == ServiceStatus.STARTED, "Service not started");
+  assert(service.endpointId, "FATAL endpointId null");
 
   await sb.requestTo(service.endpointId, "service-manager-client", {header: {method: "shutdown", pid: service.pid}});
   service.status = ServiceStatus.STOPPING;
@@ -461,7 +462,7 @@ function subscribeTopic(client: Client, topicName: string): Message {
 }
 
 function unsubscribeTopic(client: Client): Message {
-  client.viewTopic = null;
+  client.viewTopic = undefined;
   return {};
 }
 
