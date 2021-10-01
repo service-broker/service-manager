@@ -1,8 +1,7 @@
 import sb from "./service-broker"
+import { shutdown } from "./service-manager"
 
-afterAll(() => {
-  sb.shutdown()
-});
+afterAll(shutdown)
 
 
 test("pub/sub", async () => {
@@ -69,7 +68,6 @@ test("request/response", async () => {
   });
   expect(await queue.shift()).toEqual({
     header: {
-      ip: expect.any(String),
       to: endpointId,
       from: expect.any(String),
       id: expect.any(String),
@@ -95,7 +93,6 @@ test("request/response", async () => {
   });
   expect(await queue.shift()).toEqual({
     header: {
-      ip: expect.any(String),
       to: endpointId,
       from: expect.any(String),
       type: "ServiceRequest",

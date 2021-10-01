@@ -11,15 +11,20 @@ if (config.siteName && config.serviceName) checkIn();
 
 
 function onRequest(req: MessageWithHeader) {
-  if (req.header.method == "shutdown") return shutdown(req);
+  if (req.header.method == "shutdown") return remoteShutdown(req);
   else throw new Error("Unknown method " + req.header.method);
 }
 
-async function shutdown(req: MessageWithHeader) {
+async function remoteShutdown(req: MessageWithHeader) {
   if (req.header.pid != process.pid) throw new Error("pid incorrect");
+  await shutdown()
+}
+
+export async function shutdown() {
   for (const handler of shutdownHandlers) await handler();
   clearTimeout(checkInTimer);
-  setTimeout(() => sb.shutdown(), 1000);
+  await new Promise(f => setTimeout(f, 1000))
+  await sb.shutdown()
 }
 
 function checkIn() {

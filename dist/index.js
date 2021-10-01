@@ -22,8 +22,10 @@ const state = loadState();
 const topicHistory = {};
 for (const topic of Object.values(state.topics))
     service_broker_1.default.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
-setInterval(saveState, config_1.default.saveStateInterval);
-setInterval(clientsKeepAlive, config_1.default.clientsKeepAliveInterval);
+const jobs = [
+    setInterval(saveState, config_1.default.saveStateInterval),
+    setInterval(clientsKeepAlive, config_1.default.clientsKeepAliveInterval),
+];
 function loadState() {
     try {
         const text = fs.readFileSync("state.json", "utf8");
@@ -399,5 +401,7 @@ function interpolate(template, vars) {
 }
 function onShutdown() {
     logger_1.default.info("Shutdown request received");
+    for (const job of jobs)
+        clearInterval(job);
     return Promise.resolve();
 }

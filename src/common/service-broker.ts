@@ -1,4 +1,4 @@
-import * as pTimeout from "p-timeout";
+import pTimeout from "p-timeout";
 import { PassThrough, Readable, Transform } from "stream";
 import * as WebSocket from "ws";
 import config from "../config";
@@ -77,12 +77,12 @@ private async connect(): Promise<Connection|null> {
       });
     });
     logger.info("Service broker connection established");
-    ws.on("message", (data: string|Buffer) => this.onMessage(data));
+    ws.on("message", (data: Buffer, isBinary: unknown) => this.onMessage(isBinary == false ? data.toString() : data))
     ws.on("error", logger.error);
     ws.once("close", (code, reason) => {
       ws.isClosed = true;
       if (!this.shutdownFlag) {
-        logger.error("Service broker connection lost,", code, reason||"");
+        logger.error("Service broker connection lost,", code, reason ? reason.toString() : "")
         this.getConnection();
       }
     });

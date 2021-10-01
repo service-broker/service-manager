@@ -1,7 +1,8 @@
 import sb from "./common/service-broker"
+import { shutdown } from "./common/service-manager"
 import "./index"
 
-afterAll(() => sb.shutdown());
+afterAll(shutdown);
 
 
 test("test only", async () => {

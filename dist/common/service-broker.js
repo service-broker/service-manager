@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ServiceBroker = void 0;
-const pTimeout = require("p-timeout");
+const p_timeout_1 = require("p-timeout");
 const stream_1 = require("stream");
 const WebSocket = require("ws");
 const config_1 = require("../config");
@@ -42,12 +42,12 @@ class ServiceBroker {
                 });
             });
             logger_1.default.info("Service broker connection established");
-            ws.on("message", (data) => this.onMessage(data));
+            ws.on("message", (data, isBinary) => this.onMessage(isBinary == false ? data.toString() : data));
             ws.on("error", logger_1.default.error);
             ws.once("close", (code, reason) => {
                 ws.isClosed = true;
                 if (!this.shutdownFlag) {
-                    logger_1.default.error("Service broker connection lost,", code, reason || "");
+                    logger_1.default.error("Service broker connection lost,", code, reason ? reason.toString() : "");
                     this.getConnection();
                 }
             });
@@ -309,7 +309,7 @@ class ServiceBroker {
                 }
             };
         });
-        return pTimeout(promise, timeout || 30 * 1000)
+        return (0, p_timeout_1.default)(promise, timeout || 30 * 1000)
             .catch(err => {
             delete this.pending[id];
             throw err;

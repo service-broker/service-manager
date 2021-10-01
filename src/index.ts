@@ -65,8 +65,11 @@ const state: State = loadState();
 const topicHistory: {[key: string]: string[]} = {};
 
 for (const topic of Object.values(state.topics)) sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
-setInterval(saveState, config.saveStateInterval);
-setInterval(clientsKeepAlive, config.clientsKeepAliveInterval);
+
+const jobs = [
+  setInterval(saveState, config.saveStateInterval),
+  setInterval(clientsKeepAlive, config.clientsKeepAliveInterval),
+]
 
 function loadState(): State {
   try {
@@ -494,5 +497,6 @@ function interpolate(template: string, vars: {[key: string]: any}) {
 
 function onShutdown(): Promise<void> {
   logger.info("Shutdown request received");
+  for (const job of jobs) clearInterval(job)
   return Promise.resolve();
 }
