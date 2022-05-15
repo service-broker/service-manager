@@ -1,75 +1,31 @@
-This is the boilerplate code for service providers and clients to communicate with the [service broker](https://github.com/ken107/service-broker).
+The service manager is itself a service provider, providing the "service-manager" service.  A request to the service manager should have two header fields, `method` and `args`, the latter being an object containing any required parameters.
 
-### Configuration
-The `serviceBrokerUrl` property in `config.ts` specifies the broker's websocket URL.
 
-### Service Broker API
-These API methods are exposed by the `common/service-broker` module.
+### Manager API
 
-#### Advertise
-```typescript
-function advertise(
-  service: {name: string, capabilities?: string[], priority?: number},
-  handler: (req: Message) => Message|Promise<Message>
-): void
-```
-A service provider calls this method to advertise to the broker the service(s) it provides.  For explanation of parameters, see [service broker](https://github.com/ken107/service-broker).
+| Method | Args | Description |
+| ------ | ---- | ----------- |
+| clientLogin | password | Clients must login before invoking any API |
+| addSite | siteName, hostName, deployFolder, serviceBrokerUrl | Add a host site where services can be deployed |
+| removeSite | siteName | Remove a site, must be empty (have no deployed services) |
+| deployService | siteName, serviceName, repoUrl | Deploy a service to a site |
+| undeployService | siteName, serviceName | Remove a deployed service |
+| startService | siteName, serviceName | Start a service |
+| stopService | siteName, serviceName | Send a shutdown request to a service |
+| killService | siteName, serviceName | Kill a non-responsive service |
+| viewServiceLogs | siteName, serviceName, lines | View the last n lines of stdout and stderr |
+| setServiceStatus | siteName, serviceName, newStatus | Force update a service's status |
+| updateService | siteName, serviceName | Run git pull && npm install |
+| getServiceConf | siteName, serviceName | Retrieve the service's .env configuration entries as an object |
+| updateServiceConf | siteName, serviceName, serviceConf | Update the service's .env file |
+| addTopic | topicName, historySize | Monitor a topic, keeping a history of recent entries |
+| removeTopic | topicName | Stop monitoring a topic |
+| subscribeTopic | topicName | Subscribe to a monitored topic, receiving the history first, then new entries when they are published |
+| unsubscribeTopic | topicName | Stop subscribing to a topic |
 
-#### Request
-```typescript
-function request(
-  service: {name: string, capabilities?: string[]},
-  req: Message,
-  timeout?: number
-): Promise<Message>
-```
-A client calls this method to request some service.  The broker will select a qualified provider based on `serviceName` and `capabilities`.  The parameter `req` contains the actual message that'll be delivered to the service provider (see `handler` in Advertise).  The returned promise contains the response from the provider.
 
-#### Publish/Subscribe
-```typescript
-function publish(topic: string, text: string)
-function subscribe(topic: string, handler: (text: string) => void)
-```
-These two are self-explanatory.
+### Status Report API
 
-#### Status
-```typescript
-function status()
-```
-Returns the service broker's status, which includes the list of services and service providers currently active.
-
-#### Shutdown
-```typescript
-function shutdown()
-```
-Close the connection to the service broker.
-
-#### SetServiceHandler
-```typescript
-function setServiceHandler(
-  serviceName: string,
-  handler: (req: Message) => Message|Promise<Message>
-): void
-```
-This installs a handler for a particular service without advertising the it to the service broker.  This works for the case where the client knows the provider's endpointId and can send the request to it directly (see RequestTo and NotifyTo).
-
-#### RequestTo
-```typescript
-function requestTo(
-  endpointId: string,
-  serviceName: string,
-  req: Message,
-  timeout?: number
-): Promise<Message>
-```
-Send a request directly to an endpoint.
-
-#### NotifyTo
-```typescript
-function notifyTo(
-  endpointId: string,
-  serviceName: string,
-  msg: Message
-): void
-```
-Send a notification directly to an endpoint.
+| Method | Args | Description |
+| ------ | ---- | ----------- |
+| serviceCheckIn | siteName, serviceName, pid | A service calls this API to report that it's alive (it must provide its own PID, which must match what the SM expects) |
