@@ -1,3 +1,4 @@
+import { Message, MessageWithHeader } from "@service-broker/service-broker-client";
 import * as assert from "assert";
 import { ChildProcess, execFile } from "child_process";
 import * as dotenv from "dotenv";
@@ -5,7 +6,7 @@ import * as fs from "fs";
 import { tmpName } from "tmp";
 import { promisify } from "util";
 import logger from "./common/logger";
-import sb, { Message, MessageWithHeader } from "./common/service-broker";
+import sb from "./common/service-broker";
 import { addShutdownHandler } from "./common/service-manager";
 import config from "./config";
 
