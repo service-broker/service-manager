@@ -22,6 +22,7 @@ interface Site {
 interface Service {
   serviceName: string;
   repoUrl: string;
+  repoTag?: string;
   status: ServiceStatus;
   pid?: string;
   endpointId?: string;
@@ -101,7 +102,7 @@ function onRequest(req: MessageWithHeader): Message|Promise<Message> {
   if (!client) throw new Error("Unauthorized");
   else if (method == "addSite") return addSite(args.siteName, args.hostName, args.deployFolder, args.serviceBrokerUrl);
   else if (method == "removeSite") return removeSite(args.siteName);
-  else if (method == "deployService") return deployService(args.siteName, args.serviceName, args.repoUrl);
+  else if (method == "deployService") return deployService(args.siteName, args.serviceName, args.repoUrl, args.repoTag);
   else if (method == "undeployService") return undeployService(args.siteName, args.serviceName);
   else if (method == "startService") return startService(args.siteName, args.serviceName);
   else if (method == "stopService") return stopService(args.siteName, args.serviceName);
@@ -193,9 +194,11 @@ async function getDeployedServices(site: Site): Promise<{[key: string]: Service}
 
   for (const serviceName of serviceNames) {
     const envInfo = await readServiceConf(site, serviceName);
+    assert(envInfo.REPO_URL, "Missing env REPO_URL for service " + serviceName)
     services[serviceName] = {
       serviceName,
       repoUrl: envInfo.REPO_URL,
+      repoTag: envInfo.REPO_TAG,
       status: ServiceStatus.STOPPED
     };
     if (envInfo.SITE_NAME != site.siteName) {
@@ -222,16 +225,22 @@ function isSiteActive(site: Site): boolean {
 }
 
 
-async function deployService(siteName: string, serviceName: string, repoUrl: string): Promise<Message> {
+async function deployService(siteName: string, serviceName: string, repoUrl: string, repoTag: string|undefined): Promise<Message> {
   assert(siteName && serviceName && repoUrl, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
   assert(!site.services[serviceName], "Service exists");
 
   const commands = config.commands[site.operatingSystem];
-  let output = await ssh(site.hostName, interpolate(commands.deployService, {deployFolder: site.deployFolder, serviceName, repoUrl}));
+  let output = await ssh(site.hostName, interpolate(commands.deployService, {
+    deployFolder: site.deployFolder,
+    serviceName,
+    repoUrl,
+    repoTag: repoTag || "master"
+  }))
   await writeServiceConf(site, serviceName, {
     REPO_URL: repoUrl,
+    REPO_TAG: repoTag,
     SERVICE_BROKER_URL: site.serviceBrokerUrl,
     SITE_NAME: siteName,
     SERVICE_NAME: serviceName,
@@ -239,21 +248,25 @@ async function deployService(siteName: string, serviceName: string, repoUrl: str
   site.services[serviceName] = {
     serviceName,
     repoUrl,
+    repoTag,
     status: ServiceStatus.STOPPED
   };
   broadcastStateUpdate({op: "add", path: `/sites/${siteName}/services/${serviceName}`, value: site.services[serviceName]});
   return {payload: JSON.stringify(output)};
 }
 
-async function readServiceConf(site: Site, serviceName: string): Promise<{[name: string]: string}> {
+async function readServiceConf(site: Site, serviceName: string): Promise<{[name: string]: string|undefined}> {
   const commands = config.commands[site.operatingSystem];
   const output = await ssh(site.hostName, interpolate(commands.readServiceConf, {deployFolder: site.deployFolder, serviceName}));
   return dotenv.parse(output.stdout);
 }
 
-async function writeServiceConf(site: Site, serviceName: string, props: {[name: string]: string}): Promise<void> {
+async function writeServiceConf(site: Site, serviceName: string, props: {[name: string]: string|undefined}): Promise<void> {
   const file = await new Promise((fulfill: (path: string) => void, reject) => tmpName((err, path) => err ? reject(err) : fulfill(path)));
-  const text = Object.keys(props).map(name => `${name}=${props[name]}`).join('\n');
+  const text = Object.keys(props)
+    .filter(name => props[name] != undefined)
+    .map(name => `${name}=${props[name]}`)
+    .join('\n')
   await promisify(fs.writeFile)(file, text);
   await scp(file, `${site.hostName}:${site.deployFolder}/${serviceName}/.env`);
   await promisify(fs.unlink)(file);
@@ -388,7 +401,11 @@ async function updateService(siteName: string, serviceName: string): Promise<Mes
   assert(service, "Service not exists");
 
   const commands = config.commands[site.operatingSystem];
-  let output = await ssh(site.hostName, interpolate(commands.updateService, {deployFolder: site.deployFolder, serviceName}));
+  let output = await ssh(site.hostName, interpolate(commands.updateService, {
+    deployFolder: site.deployFolder,
+    serviceName,
+    repoTag: service.repoTag || "master"
+  }))
   return {payload: JSON.stringify(output)};
 }
 
