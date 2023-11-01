@@ -157,6 +157,7 @@ async function getDeployedServices(site) {
         assert(envInfo.REPO_URL, "Missing env REPO_URL for service " + serviceName);
         services[serviceName] = {
             serviceName,
+            deploymentSecret: envInfo.DEPLOYMENT_SECRET,
             repoUrl: envInfo.REPO_URL,
             repoTag: envInfo.REPO_TAG,
             status: ServiceStatus.STOPPED
@@ -184,6 +185,7 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
     const site = state.sites[siteName];
     assert(site, "Site not found");
     assert(!site.services[serviceName], "Service exists");
+    const deploymentSecret = String(Math.random());
     const commands = config_1.default.commands[site.operatingSystem];
     let output = await ssh(site.hostName, interpolate(commands.deployService, {
         deployFolder: site.deployFolder,
@@ -197,9 +199,11 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
         SERVICE_BROKER_URL: site.serviceBrokerUrl,
         SITE_NAME: siteName,
         SERVICE_NAME: serviceName,
+        DEPLOYMENT_SECRET: deploymentSecret,
     });
     site.services[serviceName] = {
         serviceName,
+        deploymentSecret,
         repoUrl,
         repoTag,
         status: ServiceStatus.STOPPED
@@ -267,7 +271,7 @@ async function stopService(siteName, serviceName) {
     assert(service, "Service not exists");
     assert(service.status == ServiceStatus.STARTED, "Service not started");
     assert(service.endpointId, "FATAL endpointId null");
-    await service_broker_1.default.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid } });
+    await service_broker_1.default.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid, secret: service.deploymentSecret } });
     service.status = ServiceStatus.STOPPING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
     waitUntilStopped(site, service, 6);

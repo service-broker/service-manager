@@ -3,7 +3,7 @@ import config from "../config";
 import logger from "./logger";
 import sb from "./service-broker";
 
-let checkInTimer: NodeJS.Timer;
+let checkInTimer: NodeJS.Timeout;
 const shutdownHandlers: Array<() => Promise<void>> = [];
 
 sb.setServiceHandler("service-manager-client", onRequest);
