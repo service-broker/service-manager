@@ -3,5 +3,5 @@ import config from "../config";
 import logger from "./logger";
 
 
-const defaultServiceBroker = new ServiceBroker(config.serviceBrokerUrl, logger);
+const defaultServiceBroker = new ServiceBroker({url: config.serviceBrokerUrl, logger});
 export default defaultServiceBroker;

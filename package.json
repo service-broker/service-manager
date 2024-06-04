@@ -19,14 +19,14 @@
   },
   "homepage": "https://github.com/ken107/service-manager#readme",
   "devDependencies": {
-    "@types/jest": "^29.5.7",
-    "@types/node": "^20.8.10",
-    "@types/tmp": "^0.2.5",
-    "typescript": "^5.2.2"
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.1",
+    "@types/tmp": "^0.2.6",
+    "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@service-broker/service-broker-client": "^1.1.0",
-    "dotenv": "^16.3.1",
-    "tmp": "^0.2.1"
+    "@service-broker/service-broker-client": "^2.1.0",
+    "dotenv": "^16.4.5",
+    "tmp": "^0.2.3"
   }
 }
