@@ -1,15 +1,18 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const assert = require("assert");
+const assert_1 = __importDefault(require("assert"));
 const child_process_1 = require("child_process");
-const dotenv = require("dotenv");
-const fs = require("fs");
+const dotenv_1 = __importDefault(require("dotenv"));
+const fs_1 = __importDefault(require("fs"));
 const tmp_1 = require("tmp");
 const util_1 = require("util");
-const logger_1 = require("./common/logger");
-const service_broker_1 = require("./common/service-broker");
+const logger_1 = __importDefault(require("./common/logger"));
+const service_broker_1 = __importDefault(require("./common/service-broker"));
 const service_manager_1 = require("./common/service-manager");
-const config_1 = require("./config");
+const config_1 = __importDefault(require("./config"));
 var ServiceStatus;
 (function (ServiceStatus) {
     ServiceStatus["STOPPED"] = "STOPPED";
@@ -28,7 +31,7 @@ const jobs = [
 ];
 function loadState() {
     try {
-        const text = fs.readFileSync("state.json", "utf8");
+        const text = fs_1.default.readFileSync("state.json", "utf8");
         return JSON.parse(text);
     }
     catch (err) {
@@ -36,7 +39,7 @@ function loadState() {
     }
 }
 function saveState() {
-    fs.writeFile("state.json", JSON.stringify(state), err => err && console.error(err));
+    fs_1.default.writeFile("state.json", JSON.stringify(state), err => err && console.error(err));
 }
 service_broker_1.default.advertise(config_1.default.service, onRequest)
     .then(() => logger_1.default.info(config_1.default.service.name + " service started"));
@@ -117,8 +120,8 @@ function onClientError(client, err) {
     delete clients[client.endpointId];
 }
 async function addSite(siteName, hostName, deployFolder, serviceBrokerUrl) {
-    assert(siteName && hostName && deployFolder && serviceBrokerUrl, "Missing args");
-    assert(!state.sites[siteName], "Site already exists");
+    (0, assert_1.default)(siteName && hostName && deployFolder && serviceBrokerUrl, "Missing args");
+    (0, assert_1.default)(!state.sites[siteName], "Site already exists");
     if (deployFolder.startsWith("~/"))
         deployFolder = deployFolder.slice(2);
     if (deployFolder.endsWith("/"))
@@ -154,7 +157,7 @@ async function getDeployedServices(site) {
     const services = {};
     for (const serviceName of serviceNames) {
         const envInfo = await readServiceConf(site, serviceName);
-        assert(envInfo.REPO_URL, "Missing env REPO_URL for service " + serviceName);
+        (0, assert_1.default)(envInfo.REPO_URL, "Missing env REPO_URL for service " + serviceName);
         services[serviceName] = {
             serviceName,
             deploymentSecret: envInfo.DEPLOYMENT_SECRET,
@@ -170,9 +173,9 @@ async function getDeployedServices(site) {
     return services;
 }
 function removeSite(siteName) {
-    assert(siteName, "Missing args");
-    assert(state.sites[siteName], "Site not found");
-    assert(!isSiteActive(state.sites[siteName]), "Site active");
+    (0, assert_1.default)(siteName, "Missing args");
+    (0, assert_1.default)(state.sites[siteName], "Site not found");
+    (0, assert_1.default)(!isSiteActive(state.sites[siteName]), "Site active");
     delete state.sites[siteName];
     broadcastStateUpdate({ op: "remove", path: `/sites/${siteName}` });
     return {};
@@ -181,10 +184,10 @@ function isSiteActive(site) {
     return Object.values(site.services).some(x => x.status != ServiceStatus.STOPPED);
 }
 async function deployService(siteName, serviceName, repoUrl, repoTag) {
-    assert(siteName && serviceName && repoUrl, "Missing args");
+    (0, assert_1.default)(siteName && serviceName && repoUrl, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
-    assert(!site.services[serviceName], "Service exists");
+    (0, assert_1.default)(site, "Site not found");
+    (0, assert_1.default)(!site.services[serviceName], "Service exists");
     const deploymentSecret = String(Math.random());
     const commands = config_1.default.commands[site.operatingSystem];
     let output = await ssh(site.hostName, interpolate(commands.deployService, {
@@ -214,7 +217,7 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
 async function readServiceConf(site, serviceName) {
     const commands = config_1.default.commands[site.operatingSystem];
     const output = await ssh(site.hostName, interpolate(commands.readServiceConf, { deployFolder: site.deployFolder, serviceName }));
-    return dotenv.parse(output.stdout);
+    return dotenv_1.default.parse(output.stdout);
 }
 async function writeServiceConf(site, serviceName, props) {
     const file = await new Promise((fulfill, reject) => (0, tmp_1.tmpName)((err, path) => err ? reject(err) : fulfill(path)));
@@ -222,17 +225,17 @@ async function writeServiceConf(site, serviceName, props) {
         .filter(name => props[name] != undefined)
         .map(name => `${name}=${props[name]}`)
         .join('\n');
-    await (0, util_1.promisify)(fs.writeFile)(file, text);
+    await (0, util_1.promisify)(fs_1.default.writeFile)(file, text);
     await scp(file, `${site.hostName}:${site.deployFolder}/${serviceName}/.env`);
-    await (0, util_1.promisify)(fs.unlink)(file);
+    await (0, util_1.promisify)(fs_1.default.unlink)(file);
 }
 async function undeployService(siteName, serviceName) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
-    assert(service.status == ServiceStatus.STOPPED, "Service not stopped");
+    (0, assert_1.default)(service, "Service not exists");
+    (0, assert_1.default)(service.status == ServiceStatus.STOPPED, "Service not stopped");
     const commands = config_1.default.commands[site.operatingSystem];
     await ssh(site.hostName, interpolate(commands.undeployService, { deployFolder: site.deployFolder, serviceName }));
     delete site.services[serviceName];
@@ -240,12 +243,12 @@ async function undeployService(siteName, serviceName) {
     return {};
 }
 async function startService(siteName, serviceName) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
-    assert(service.status == ServiceStatus.STOPPED, "Service not stopped");
+    (0, assert_1.default)(service, "Service not exists");
+    (0, assert_1.default)(service.status == ServiceStatus.STOPPED, "Service not stopped");
     const commands = config_1.default.commands[site.operatingSystem];
     ssh(site.hostName, interpolate(commands.startService, { deployFolder: site.deployFolder, serviceName }))
         .catch(err => "OK")
@@ -264,13 +267,13 @@ function setStopped(site, service) {
     broadcastStateUpdate({ op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service });
 }
 async function stopService(siteName, serviceName) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
-    assert(service.status == ServiceStatus.STARTED, "Service not started");
-    assert(service.endpointId, "FATAL endpointId null");
+    (0, assert_1.default)(service, "Service not exists");
+    (0, assert_1.default)(service.status == ServiceStatus.STARTED, "Service not started");
+    (0, assert_1.default)(service.endpointId, "FATAL endpointId null");
     await service_broker_1.default.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid, secret: service.deploymentSecret } });
     service.status = ServiceStatus.STOPPING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
@@ -287,12 +290,12 @@ async function waitUntilStopped(site, service, timeout) {
     }
 }
 async function killService(siteName, serviceName) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
-    assert(service.status == ServiceStatus.STARTED || service.status == ServiceStatus.STOPPING, "Service not started or stopping");
+    (0, assert_1.default)(service, "Service not exists");
+    (0, assert_1.default)(service.status == ServiceStatus.STARTED || service.status == ServiceStatus.STOPPING, "Service not started or stopping");
     const commands = config_1.default.commands[site.operatingSystem];
     await ssh(site.hostName, interpolate(commands.killService, { pid: service.pid }));
     if (service.status != ServiceStatus.STOPPING) {
@@ -303,21 +306,21 @@ async function killService(siteName, serviceName) {
     return {};
 }
 async function viewServiceLogs(siteName, serviceName, lines) {
-    assert(siteName && serviceName && lines, "Missing args");
+    (0, assert_1.default)(siteName && serviceName && lines, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
+    (0, assert_1.default)(service, "Service not exists");
     const commands = config_1.default.commands[site.operatingSystem];
     let output = await ssh(site.hostName, interpolate(commands.viewServiceLogs, { deployFolder: site.deployFolder, serviceName, lines }));
     return { payload: JSON.stringify(output) };
 }
 function setServiceStatus(siteName, serviceName, newStatus) {
-    assert(siteName && serviceName && newStatus, "Missing args");
+    (0, assert_1.default)(siteName && serviceName && newStatus, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
+    (0, assert_1.default)(service, "Service not exists");
     if (service.status != newStatus) {
         service.status = newStatus;
         broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
@@ -325,11 +328,11 @@ function setServiceStatus(siteName, serviceName, newStatus) {
     return {};
 }
 async function updateService(siteName, serviceName) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
+    (0, assert_1.default)(service, "Service not exists");
     const commands = config_1.default.commands[site.operatingSystem];
     let output = await ssh(site.hostName, interpolate(commands.updateService, {
         deployFolder: site.deployFolder,
@@ -339,25 +342,25 @@ async function updateService(siteName, serviceName) {
     return { payload: JSON.stringify(output) };
 }
 async function getServiceConf(siteName, serviceName) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const props = await readServiceConf(site, serviceName);
     return { header: { serviceConf: props } };
 }
 async function updateServiceConf(siteName, serviceName, serviceConf) {
-    assert(siteName && serviceName, "Missing args");
+    (0, assert_1.default)(siteName && serviceName, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     await writeServiceConf(site, serviceName, serviceConf);
     return {};
 }
 function serviceCheckIn(siteName, serviceName, pid, endpointId) {
-    assert(siteName && serviceName && pid && endpointId, "Missing args");
+    (0, assert_1.default)(siteName && serviceName && pid && endpointId, "Missing args");
     const site = state.sites[siteName];
-    assert(site, "Site not found");
+    (0, assert_1.default)(site, "Site not found");
     const service = site.services[serviceName];
-    assert(service, "Service not exists");
+    (0, assert_1.default)(service, "Service not exists");
     if (service.status == ServiceStatus.STARTED && service.pid == pid && service.endpointId == endpointId) {
         service.lastCheckedIn = Date.now();
     }
@@ -371,8 +374,8 @@ function serviceCheckIn(siteName, serviceName, pid, endpointId) {
     return {};
 }
 async function addTopic(topicName, historySize) {
-    assert(topicName && historySize, "Missing args");
-    assert(!state.topics[topicName], "Topic already exists");
+    (0, assert_1.default)(topicName && historySize, "Missing args");
+    (0, assert_1.default)(!state.topics[topicName], "Topic already exists");
     const topic = { topicName, historySize };
     await service_broker_1.default.subscribe(topic.topicName, (text) => onTopicMessage(topic, text));
     state.topics[topicName] = topic;
@@ -380,17 +383,17 @@ async function addTopic(topicName, historySize) {
     return {};
 }
 async function removeTopic(topicName) {
-    assert(topicName, "Missing args");
-    assert(state.topics[topicName], "Topic not exists");
+    (0, assert_1.default)(topicName, "Missing args");
+    (0, assert_1.default)(state.topics[topicName], "Topic not exists");
     await service_broker_1.default.unsubscribe(topicName);
     delete state.topics[topicName];
     broadcastStateUpdate({ op: "remove", path: `/topics/${topicName}` });
     return {};
 }
 function subscribeTopic(client, topicName) {
-    assert(client && topicName, "Missing args");
+    (0, assert_1.default)(client && topicName, "Missing args");
     const topic = state.topics[topicName];
-    assert(topic, "Topic not found");
+    (0, assert_1.default)(topic, "Topic not found");
     client.viewTopic = topicName;
     return { payload: JSON.stringify(topicHistory[topicName] || []) };
 }

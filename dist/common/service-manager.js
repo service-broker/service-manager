@@ -1,9 +1,13 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.addShutdownHandler = exports.shutdown = void 0;
-const config_1 = require("../config");
-const logger_1 = require("./logger");
-const service_broker_1 = require("./service-broker");
+exports.shutdown = shutdown;
+exports.addShutdownHandler = addShutdownHandler;
+const config_1 = __importDefault(require("../config"));
+const logger_1 = __importDefault(require("./logger"));
+const service_broker_1 = __importDefault(require("./service-broker"));
 let checkInTimer;
 const shutdownHandlers = [];
 service_broker_1.default.setServiceHandler("service-manager-client", onRequest);
@@ -27,7 +31,6 @@ async function shutdown() {
     await new Promise(f => setTimeout(f, 1000));
     await service_broker_1.default.shutdown();
 }
-exports.shutdown = shutdown;
 function checkIn() {
     service_broker_1.default.notify({ name: "service-manager" }, {
         header: {
@@ -45,4 +48,3 @@ function checkIn() {
 function addShutdownHandler(handler) {
     shutdownHandlers.push(handler);
 }
-exports.addShutdownHandler = addShutdownHandler;

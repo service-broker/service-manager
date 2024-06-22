@@ -1,11 +1,13 @@
 "use strict";
-var _a, _b;
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-const dotenv = require("dotenv");
-const assert = require("assert");
-dotenv.config();
-assert(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL");
-assert(process.env.PASSWORD, "Missing env PASSWORD");
+const assert_1 = __importDefault(require("assert"));
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
+(0, assert_1.default)(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL");
+(0, assert_1.default)(process.env.PASSWORD, "Missing env PASSWORD");
 exports.default = {
     password: process.env.PASSWORD,
     saveStateInterval: 30 * 1000,
@@ -16,7 +18,7 @@ exports.default = {
             readServiceConf: "cat ${deployFolder}/${serviceName}/.env",
             deployService: "cd ${deployFolder} && git clone --single-branch --branch ${repoTag} ${repoUrl} ${serviceName} && cd ${serviceName} && npm i --omit=dev --no-save",
             undeployService: "rm -rf ${deployFolder}/${serviceName}",
-            startService: "cd ${deployFolder}/${serviceName} && " + ((_a = process.env.START_COMMAND) !== null && _a !== void 0 ? _a : "npm start") + " 1>stdout.log 2>stderr.log",
+            startService: "cd ${deployFolder}/${serviceName} && " + (process.env.START_COMMAND ?? "npm start") + " 1>stdout.log 2>stderr.log",
             killService: "kill -9 ${pid}",
             checkService: "timeout ${timeout} tail -f --pid=${pid} /dev/null; kill -0 ${pid}",
             updateService: "cd ${deployFolder}/${serviceName} && git fetch origin ${repoTag} && git reset --hard origin/${repoTag} && npm i --omit=dev --no-save",
@@ -27,7 +29,7 @@ exports.default = {
             readServiceConf: "type ${deployFolder}\\${serviceName}\\.env",
             deployService: "cd ${deployFolder} && git clone --single-branch --branch ${repoTag} ${repoUrl} ${serviceName} && cd ${serviceName} && npm i --omit=dev --no-save",
             undeployService: "rmdir /S /Q ${deployFolder}\\${serviceName}",
-            startService: "cd ${deployFolder}\\${serviceName} && " + ((_b = process.env.START_COMMAND) !== null && _b !== void 0 ? _b : "npm start") + " 1>stdout.log 2>stderr.log",
+            startService: "cd ${deployFolder}\\${serviceName} && " + (process.env.START_COMMAND ?? "npm start") + " 1>stdout.log 2>stderr.log",
             killService: "taskkill /F /PID ${pid}",
             checkService: "powershell Wait-Process -Id ${pid} -Timeout ${timeout}; Get-Process -Id ${pid}",
             updateService: "cd ${deployFolder}\\${serviceName} && git fetch origin ${repoTag} && git reset --hard origin/${repoTag} && npm i --omit=dev --no-save",
