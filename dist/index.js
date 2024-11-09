@@ -160,7 +160,6 @@ async function getDeployedServices(site) {
         (0, assert_1.default)(envInfo.REPO_URL, "Missing env REPO_URL for service " + serviceName);
         services[serviceName] = {
             serviceName,
-            deploymentSecret: envInfo.DEPLOYMENT_SECRET,
             repoUrl: envInfo.REPO_URL,
             repoTag: envInfo.REPO_TAG,
             status: ServiceStatus.STOPPED
@@ -188,7 +187,6 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
     const site = state.sites[siteName];
     (0, assert_1.default)(site, "Site not found");
     (0, assert_1.default)(!site.services[serviceName], "Service exists");
-    const deploymentSecret = String(Math.random());
     const commands = config_1.default.commands[site.operatingSystem];
     let output = await ssh(site.hostName, interpolate(commands.deployService, {
         deployFolder: site.deployFolder,
@@ -202,11 +200,9 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
         SERVICE_BROKER_URL: site.serviceBrokerUrl,
         SITE_NAME: siteName,
         SERVICE_NAME: serviceName,
-        DEPLOYMENT_SECRET: deploymentSecret,
     });
     site.services[serviceName] = {
         serviceName,
-        deploymentSecret,
         repoUrl,
         repoTag,
         status: ServiceStatus.STOPPED
@@ -274,7 +270,7 @@ async function stopService(siteName, serviceName) {
     (0, assert_1.default)(service, "Service not exists");
     (0, assert_1.default)(service.status == ServiceStatus.STARTED, "Service not started");
     (0, assert_1.default)(service.endpointId, "FATAL endpointId null");
-    await service_broker_1.default.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid, secret: service.deploymentSecret } });
+    await service_broker_1.default.requestTo(service.endpointId, "service-manager-client", { header: { method: "shutdown", pid: service.pid } });
     service.status = ServiceStatus.STOPPING;
     broadcastStateUpdate({ op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status });
     waitUntilStopped(site, service, 6);
