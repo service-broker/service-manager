@@ -9,6 +9,7 @@ import logger from "./common/logger";
 import sb from "./common/service-broker";
 import { addShutdownHandler } from "./common/service-manager";
 import config from "./config";
+import { createTunnel, destroyTunnel } from "./tunnels";
 
 interface Site {
   siteName: string;
@@ -17,6 +18,7 @@ interface Site {
   deployFolder: string;
   serviceBrokerUrl: string;
   services: {[key: string]: Service}
+  tunnels: {[fromPort: number]: Tunnel}
 }
 
 interface Service {
@@ -27,6 +29,11 @@ interface Service {
   pid?: string;
   endpointId?: string;
   lastCheckedIn?: number;
+}
+
+interface Tunnel {
+  toHost: string
+  toPort: number
 }
 
 enum ServiceStatus {
@@ -76,7 +83,15 @@ const jobs = [
 function loadState(): State {
   try {
     const text = fs.readFileSync("state.json", "utf8");
-    return JSON.parse(text);
+    const state = JSON.parse(text) as State
+    for (const siteName in state.sites) {
+      const site = state.sites[siteName]
+      for (const fromPort in site.tunnels) {
+        const {toHost, toPort} = site.tunnels[fromPort]
+        createTunnel(site.hostName, Number(fromPort), toHost, toPort)
+      }
+    }
+    return state
   }
   catch (err) {
     return {sites: {}, topics: {}};
@@ -116,6 +131,8 @@ function onRequest(req: MessageWithHeader): Message|Promise<Message> {
   else if (method == "removeTopic") return removeTopic(args.topicName);
   else if (method == "subscribeTopic") return subscribeTopic(client, args.topicName);
   else if (method == "unsubscribeTopic") return unsubscribeTopic(client);
+  else if (method == "addTunnel") return addTunnel(args.siteName, args.fromPort, args.toHost, args.toPort)
+  else if (method == "removeTunnel") return removeTunnel(args.siteName, args.fromPort)
   else throw new Error("Unknown method " + method);
 }
 
@@ -166,7 +183,8 @@ async function addSite(siteName: string, hostName: string, deployFolder: string,
     operatingSystem,
     deployFolder,
     serviceBrokerUrl,
-    services: {}
+    services: {},
+    tunnels: {},
   };
   site.services = await getDeployedServices(site);
 
@@ -496,6 +514,43 @@ function onTopicMessage(topic: Topic, text: string) {
     if (client.viewTopic == topic.topicName)
       sb.notifyTo(client.endpointId, "service-manager-client", {header: {method: "onTopicMessage"}, payload: text});
   })
+}
+
+function addTunnel(siteName: unknown, fromPort: unknown, toHost: unknown, toPort: unknown) {
+  assert(
+    typeof siteName == "string"
+    && typeof fromPort == "number"
+    && typeof toHost == "string"
+    && typeof toPort == "number", "Bad args"
+  )
+  const site = state.sites[siteName]
+  assert(site, "Site not found")
+  assert(!site.tunnels[fromPort], "Tunnel exists")
+  site.tunnels[fromPort] = {toHost, toPort}
+  broadcastStateUpdate({
+    op: "add",
+    path: `/sites/${siteName}/tunnels/${fromPort}`,
+    value: site.tunnels[fromPort]
+  })
+  createTunnel(site.hostName, fromPort, toHost, toPort)
+  return {}
+}
+
+function removeTunnel(siteName: unknown, fromPort: unknown) {
+  assert(
+    typeof siteName == "string"
+    && typeof fromPort == "number", "Bad args"
+  )
+  const site = state.sites[siteName]
+  assert(site, "Site not found")
+  assert(site.tunnels[fromPort], "Tunnel not exists")
+  delete site.tunnels[fromPort]
+  broadcastStateUpdate({
+    op: "remove",
+    path: `/sites/${siteName}/tunnels/${fromPort}`
+  })
+  destroyTunnel(site.hostName, fromPort)
+  return {}
 }
 
 

@@ -13,6 +13,7 @@ const logger_1 = __importDefault(require("./common/logger"));
 const service_broker_1 = __importDefault(require("./common/service-broker"));
 const service_manager_1 = require("./common/service-manager");
 const config_1 = __importDefault(require("./config"));
+const tunnels_1 = require("./tunnels");
 var ServiceStatus;
 (function (ServiceStatus) {
     ServiceStatus["STOPPED"] = "STOPPED";
@@ -32,7 +33,15 @@ const jobs = [
 function loadState() {
     try {
         const text = fs_1.default.readFileSync("state.json", "utf8");
-        return JSON.parse(text);
+        const state = JSON.parse(text);
+        for (const siteName in state.sites) {
+            const site = state.sites[siteName];
+            for (const fromPort in site.tunnels) {
+                const { toHost, toPort } = site.tunnels[fromPort];
+                (0, tunnels_1.createTunnel)(site.hostName, Number(fromPort), toHost, toPort);
+            }
+        }
+        return state;
     }
     catch (err) {
         return { sites: {}, topics: {} };
@@ -86,6 +95,10 @@ function onRequest(req) {
         return subscribeTopic(client, args.topicName);
     else if (method == "unsubscribeTopic")
         return unsubscribeTopic(client);
+    else if (method == "addTunnel")
+        return addTunnel(args.siteName, args.fromPort, args.toHost, args.toPort);
+    else if (method == "removeTunnel")
+        return removeTunnel(args.siteName, args.fromPort);
     else
         throw new Error("Unknown method " + method);
 }
@@ -133,7 +146,8 @@ async function addSite(siteName, hostName, deployFolder, serviceBrokerUrl) {
         operatingSystem,
         deployFolder,
         serviceBrokerUrl,
-        services: {}
+        services: {},
+        tunnels: {},
     };
     site.services = await getDeployedServices(site);
     state.sites[siteName] = site;
@@ -406,6 +420,37 @@ function onTopicMessage(topic, text) {
         if (client.viewTopic == topic.topicName)
             service_broker_1.default.notifyTo(client.endpointId, "service-manager-client", { header: { method: "onTopicMessage" }, payload: text });
     });
+}
+function addTunnel(siteName, fromPort, toHost, toPort) {
+    (0, assert_1.default)(typeof siteName == "string"
+        && typeof fromPort == "number"
+        && typeof toHost == "string"
+        && typeof toPort == "number", "Bad args");
+    const site = state.sites[siteName];
+    (0, assert_1.default)(site, "Site not found");
+    (0, assert_1.default)(!site.tunnels[fromPort], "Tunnel exists");
+    site.tunnels[fromPort] = { toHost, toPort };
+    broadcastStateUpdate({
+        op: "add",
+        path: `/sites/${siteName}/tunnels/${fromPort}`,
+        value: site.tunnels[fromPort]
+    });
+    (0, tunnels_1.createTunnel)(site.hostName, fromPort, toHost, toPort);
+    return {};
+}
+function removeTunnel(siteName, fromPort) {
+    (0, assert_1.default)(typeof siteName == "string"
+        && typeof fromPort == "number", "Bad args");
+    const site = state.sites[siteName];
+    (0, assert_1.default)(site, "Site not found");
+    (0, assert_1.default)(site.tunnels[fromPort], "Tunnel not exists");
+    delete site.tunnels[fromPort];
+    broadcastStateUpdate({
+        op: "remove",
+        path: `/sites/${siteName}/tunnels/${fromPort}`
+    });
+    (0, tunnels_1.destroyTunnel)(site.hostName, fromPort);
+    return {};
 }
 function ssh(hostName, command) {
     return (0, util_1.promisify)(child_process_1.execFile)("ssh", ["-o", "BatchMode=yes", hostName, command]);
