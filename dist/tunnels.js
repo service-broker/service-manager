@@ -14,10 +14,13 @@ function createTunnel(hostName, fromPort, toHost, toPort) {
         logger_1.default.warn("Can't create, tunnel exists");
     }
     else {
-        const tunnelArgs = fromPort < 0 ? ["-R", `${-fromPort}:${toHost}:${toPort}`] : ["-L", `${fromPort}:${toHost}:${toPort}`];
-        const child = (0, child_process_1.spawn)("ssh", ["-N", "-o", "BatchMode=yes", ...tunnelArgs]);
+        const tunnelArgs = fromPort < 0
+            ? ["-R", `${-fromPort}:${toHost}:${toPort}`]
+            : ["-L", `${fromPort}:${toHost}:${toPort}`];
+        const child = (0, child_process_1.spawn)("ssh", ["-N", "-o", "BatchMode=yes", ...tunnelArgs, hostName]);
+        child.once("spawn", () => logger_1.default.info("Tunnel", child.pid, "STARTED"));
         child.on("error", err => logger_1.default.error("Tunnel", child.pid, err));
-        child.once("close", () => logger_1.default.info("Tunnel", child.pid, "terminated"));
+        child.once("close", () => logger_1.default.info("Tunnel", child.pid, "TERMINATED"));
         tunnels.set(key, child);
     }
 }

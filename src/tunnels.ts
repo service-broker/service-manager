@@ -8,10 +8,13 @@ export function createTunnel(hostName: string, fromPort: number, toHost: string,
   if (tunnels.has(key)) {
     logger.warn("Can't create, tunnel exists")
   } else {
-    const tunnelArgs = fromPort < 0 ? ["-R", `${-fromPort}:${toHost}:${toPort}`] : ["-L", `${fromPort}:${toHost}:${toPort}`]
-    const child = spawn("ssh", ["-N", "-o", "BatchMode=yes", ...tunnelArgs])
+    const tunnelArgs = fromPort < 0
+      ? ["-R", `${-fromPort}:${toHost}:${toPort}`]
+      : ["-L", `${fromPort}:${toHost}:${toPort}`]
+    const child = spawn("ssh", ["-N", "-o", "BatchMode=yes", ...tunnelArgs, hostName])
+    child.once("spawn", () => logger.info("Tunnel", child.pid, "STARTED"))
     child.on("error", err => logger.error("Tunnel", child.pid, err))
-    child.once("close", () => logger.info("Tunnel", child.pid, "terminated"))
+    child.once("close", () => logger.info("Tunnel", child.pid, "TERMINATED"))
     tunnels.set(key, child)
   }
 }

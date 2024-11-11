@@ -10,7 +10,6 @@ dotenv_1.default.config();
 (0, assert_1.default)(process.env.PASSWORD, "Missing env PASSWORD");
 exports.default = {
     password: process.env.PASSWORD,
-    saveStateInterval: 30 * 1000,
     clientsKeepAliveInterval: 30 * 1000,
     commands: {
         unix: {

@@ -20,7 +20,6 @@ export interface Commands {
 
 export default {
   password: process.env.PASSWORD,
-  saveStateInterval: 30*1000,
   clientsKeepAliveInterval: 30*1000,
 
   commands: <{[operatingSystem: string]: Commands}> {

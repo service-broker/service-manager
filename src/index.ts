@@ -1,13 +1,15 @@
 import { Message, MessageWithHeader } from "@service-broker/service-broker-client";
 import assert from "assert";
-import { ChildProcess, execFile } from "child_process";
+import { ChildProcess } from "child_process";
 import dotenv from "dotenv";
 import fs from "fs";
+import * as rxjs from "rxjs";
 import { tmpName } from "tmp";
 import { promisify } from "util";
 import logger from "./common/logger";
 import sb from "./common/service-broker";
 import { addShutdownHandler } from "./common/service-manager";
+import { interpolate, scp, ssh } from "./common/util";
 import config from "./config";
 import { createTunnel, destroyTunnel } from "./tunnels";
 
@@ -71,14 +73,22 @@ interface State {
 
 const clients: {[endpointId: string]: Client} = {};
 const state: State = loadState();
+const stateChange$ = new rxjs.Subject<Patch>()
 const topicHistory: {[key: string]: string[]} = {};
 
-for (const topic of Object.values(state.topics)) sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
+for (const topic of Object.values(state.topics)) {
+  sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text))
+}
+
 
 const jobs = [
-  setInterval(saveState, config.saveStateInterval),
-  setInterval(clientsKeepAlive, config.clientsKeepAliveInterval),
+  rxjs.interval(config.clientsKeepAliveInterval).subscribe(clientsKeepAlive),
+  stateChange$.subscribe(broadcastStateUpdate),
+  stateChange$.pipe(rxjs.auditTime(1000)).subscribe(saveState),
 ]
+addShutdownHandler(() => {
+  for (const job of jobs) job.unsubscribe()
+})
 
 function loadState(): State {
   try {
@@ -86,6 +96,7 @@ function loadState(): State {
     const state = JSON.parse(text) as State
     for (const siteName in state.sites) {
       const site = state.sites[siteName]
+      if (!site.tunnels) site.tunnels = {}
       for (const fromPort in site.tunnels) {
         const {toHost, toPort} = site.tunnels[fromPort]
         createTunnel(site.hostName, Number(fromPort), toHost, toPort)
@@ -105,9 +116,8 @@ function saveState() {
 
 sb.advertise(config.service, onRequest)
   .then(() => logger.info(config.service.name + " service started"))
-addShutdownHandler(onShutdown);
 
-function onRequest(req: MessageWithHeader): Message|Promise<Message> {
+function onRequest(req: MessageWithHeader): Message|void|Promise<Message|void> {
   const method = req.header.method;
   const args = req.header.args || {};
   if (method == "clientLogin") return clientLogin(args.password, req.header.from);
@@ -170,7 +180,7 @@ function onClientError(client: Client, err: Error) {
 }
 
 
-async function addSite(siteName: string, hostName: string, deployFolder: string, serviceBrokerUrl: string): Promise<Message> {
+async function addSite(siteName: string, hostName: string, deployFolder: string, serviceBrokerUrl: string): Promise<void> {
   assert(siteName && hostName && deployFolder && serviceBrokerUrl, "Missing args");
   assert(!state.sites[siteName], "Site already exists");
   if (deployFolder.startsWith("~/")) deployFolder = deployFolder.slice(2);
@@ -189,8 +199,7 @@ async function addSite(siteName: string, hostName: string, deployFolder: string,
   site.services = await getDeployedServices(site);
 
   state.sites[siteName] = site;
-  broadcastStateUpdate({op: "add", path: `/sites/${siteName}`, value: site});
-  return {};
+  stateChange$.next({op: "add", path: `/sites/${siteName}`, value: site});
 }
 
 async function getOperatingSystem(hostName: string): Promise<string> {
@@ -228,18 +237,18 @@ async function getDeployedServices(site: Site): Promise<{[key: string]: Service}
 }
 
 
-function removeSite(siteName: string): Message {
+function removeSite(siteName: string): void {
   assert(siteName, "Missing args");
   assert(state.sites[siteName], "Site not found");
   assert(!isSiteActive(state.sites[siteName]), "Site active");
 
   delete state.sites[siteName];
-  broadcastStateUpdate({op: "remove", path: `/sites/${siteName}`});
-  return {};
+  stateChange$.next({op: "remove", path: `/sites/${siteName}`});
 }
 
 function isSiteActive(site: Site): boolean {
-  return Object.values(site.services).some(x => x.status != ServiceStatus.STOPPED);
+  return Object.values(site.services).some(x => x.status != ServiceStatus.STOPPED)
+    || Object.values(site.tunnels).length > 0
 }
 
 
@@ -269,7 +278,7 @@ async function deployService(siteName: string, serviceName: string, repoUrl: str
     repoTag,
     status: ServiceStatus.STOPPED
   };
-  broadcastStateUpdate({op: "add", path: `/sites/${siteName}/services/${serviceName}`, value: site.services[serviceName]});
+  stateChange$.next({op: "add", path: `/sites/${siteName}/services/${serviceName}`, value: site.services[serviceName]});
   return {payload: JSON.stringify(output)};
 }
 
@@ -280,7 +289,7 @@ async function readServiceConf(site: Site, serviceName: string): Promise<{[name:
 }
 
 async function writeServiceConf(site: Site, serviceName: string, props: {[name: string]: string|undefined}): Promise<void> {
-  const file = await new Promise((fulfill: (path: string) => void, reject) => tmpName((err, path) => err ? reject(err) : fulfill(path)));
+  const file = await new Promise<string>((fulfill, reject) => tmpName((err, path) => err ? reject(err) : fulfill(path)))
   const text = Object.keys(props)
     .filter(name => props[name] != undefined)
     .map(name => `${name}=${props[name]}`)
@@ -291,7 +300,7 @@ async function writeServiceConf(site: Site, serviceName: string, props: {[name: 
 }
 
 
-async function undeployService(siteName: string, serviceName: string): Promise<Message> {
+async function undeployService(siteName: string, serviceName: string): Promise<void> {
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -302,12 +311,11 @@ async function undeployService(siteName: string, serviceName: string): Promise<M
   const commands = config.commands[site.operatingSystem];
   await ssh(site.hostName, interpolate(commands.undeployService, {deployFolder: site.deployFolder, serviceName}));
   delete site.services[serviceName];
-  broadcastStateUpdate({op: "remove", path: `/sites/${siteName}/services/${serviceName}`});
-  return {};
+  stateChange$.next({op: "remove", path: `/sites/${siteName}/services/${serviceName}`});
 }
 
 
-async function startService(siteName: string, serviceName: string): Promise<Message> {
+async function startService(siteName: string, serviceName: string): Promise<void> {
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -321,8 +329,7 @@ async function startService(siteName: string, serviceName: string): Promise<Mess
     .then(() => setStopped(site, service))
 
   service.status = ServiceStatus.STARTING;
-  broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
-  return {};
+  stateChange$.next({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
 }
 
 function setStopped(site: Site, service: Service) {
@@ -331,11 +338,11 @@ function setStopped(site: Site, service: Service) {
   service.pid = undefined;
   service.endpointId = undefined;
   service.lastCheckedIn = undefined;
-  broadcastStateUpdate({op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service});
+  stateChange$.next({op: "replace", path: `/sites/${site.siteName}/services/${service.serviceName}`, value: service});
 }
 
 
-async function stopService(siteName: string, serviceName: string): Promise<Message> {
+async function stopService(siteName: string, serviceName: string): Promise<void> {
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -346,10 +353,9 @@ async function stopService(siteName: string, serviceName: string): Promise<Messa
 
   await sb.requestTo(service.endpointId, "service-manager-client", {header: {method: "shutdown", pid: service.pid}});
   service.status = ServiceStatus.STOPPING;
-  broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
+  stateChange$.next({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
 
   waitUntilStopped(site, service, 6);
-  return {};
 }
 
 async function waitUntilStopped(site: Site, service: Service, timeout: number): Promise<void> {
@@ -363,7 +369,7 @@ async function waitUntilStopped(site: Site, service: Service, timeout: number): 
 }
 
 
-async function killService(siteName: string, serviceName: string): Promise<Message> {
+async function killService(siteName: string, serviceName: string): Promise<void> {
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -375,11 +381,10 @@ async function killService(siteName: string, serviceName: string): Promise<Messa
   await ssh(site.hostName, interpolate(commands.killService, {pid: service.pid}));
   if (service.status != ServiceStatus.STOPPING) {
     service.status = ServiceStatus.STOPPING;
-    broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
+    stateChange$.next({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
   }
 
   waitUntilStopped(site, service, 3);
-  return {};
 }
 
 
@@ -396,7 +401,7 @@ async function viewServiceLogs(siteName: string, serviceName: string, lines: num
 }
 
 
-function setServiceStatus(siteName: string, serviceName: string, newStatus: ServiceStatus): Message {
+function setServiceStatus(siteName: string, serviceName: string, newStatus: ServiceStatus): void {
   assert(siteName && serviceName && newStatus, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -405,9 +410,8 @@ function setServiceStatus(siteName: string, serviceName: string, newStatus: Serv
 
   if (service.status != newStatus) {
     service.status = newStatus;
-    broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
+    stateChange$.next({op: "replace", path: `/sites/${siteName}/services/${serviceName}/status`, value: service.status});
   }
-  return {};
 }
 
 
@@ -437,17 +441,16 @@ async function getServiceConf(siteName: string, serviceName: string): Promise<Me
   return {header: {serviceConf: props}};
 }
 
-async function updateServiceConf(siteName: string, serviceName: string, serviceConf: {[name: string]: string}): Promise<Message> {
+async function updateServiceConf(siteName: string, serviceName: string, serviceConf: {[name: string]: string}): Promise<void> {
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
 
   await writeServiceConf(site, serviceName, serviceConf);
-  return {};
 }
 
 
-function serviceCheckIn(siteName: string, serviceName: string, pid: string, endpointId: string): Message {
+function serviceCheckIn(siteName: string, serviceName: string, pid: string, endpointId: string): void {
   assert(siteName && serviceName && pid && endpointId, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -462,13 +465,12 @@ function serviceCheckIn(siteName: string, serviceName: string, pid: string, endp
     service.pid = pid;
     service.endpointId = endpointId;
     service.lastCheckedIn = Date.now();
-    broadcastStateUpdate({op: "replace", path: `/sites/${siteName}/services/${serviceName}`, value: service});
+    stateChange$.next({op: "replace", path: `/sites/${siteName}/services/${serviceName}`, value: service});
   }
-  return {};
 }
 
 
-async function addTopic(topicName: string, historySize: number): Promise<Message> {
+async function addTopic(topicName: string, historySize: number): Promise<void> {
   assert(topicName && historySize, "Missing args");
   assert(!state.topics[topicName], "Topic already exists");
 
@@ -476,19 +478,17 @@ async function addTopic(topicName: string, historySize: number): Promise<Message
   await sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text));
 
   state.topics[topicName] = topic;
-  broadcastStateUpdate({op: "add", path: `/topics/${topicName}`, value: state.topics[topicName]});
-  return {};
+  stateChange$.next({op: "add", path: `/topics/${topicName}`, value: state.topics[topicName]});
 }
 
-async function removeTopic(topicName: string): Promise<Message> {
+async function removeTopic(topicName: string): Promise<void> {
   assert(topicName, "Missing args");
   assert(state.topics[topicName], "Topic not exists");
 
   await sb.unsubscribe(topicName);
 
   delete state.topics[topicName];
-  broadcastStateUpdate({op: "remove", path: `/topics/${topicName}`});
-  return {};
+  stateChange$.next({op: "remove", path: `/topics/${topicName}`});
 }
 
 function subscribeTopic(client: Client, topicName: string): Message {
@@ -500,9 +500,8 @@ function subscribeTopic(client: Client, topicName: string): Message {
   return {payload: JSON.stringify(topicHistory[topicName] || [])};
 }
 
-function unsubscribeTopic(client: Client): Message {
+function unsubscribeTopic(client: Client): void {
   client.viewTopic = undefined;
-  return {};
 }
 
 function onTopicMessage(topic: Topic, text: string) {
@@ -516,6 +515,7 @@ function onTopicMessage(topic: Topic, text: string) {
   })
 }
 
+
 function addTunnel(siteName: unknown, fromPort: unknown, toHost: unknown, toPort: unknown) {
   assert(
     typeof siteName == "string"
@@ -526,14 +526,10 @@ function addTunnel(siteName: unknown, fromPort: unknown, toHost: unknown, toPort
   const site = state.sites[siteName]
   assert(site, "Site not found")
   assert(!site.tunnels[fromPort], "Tunnel exists")
+
   site.tunnels[fromPort] = {toHost, toPort}
-  broadcastStateUpdate({
-    op: "add",
-    path: `/sites/${siteName}/tunnels/${fromPort}`,
-    value: site.tunnels[fromPort]
-  })
+  stateChange$.next({op: "add", path: `/sites/${siteName}/tunnels/${fromPort}`, value: site.tunnels[fromPort]})
   createTunnel(site.hostName, fromPort, toHost, toPort)
-  return {}
 }
 
 function removeTunnel(siteName: unknown, fromPort: unknown) {
@@ -544,32 +540,8 @@ function removeTunnel(siteName: unknown, fromPort: unknown) {
   const site = state.sites[siteName]
   assert(site, "Site not found")
   assert(site.tunnels[fromPort], "Tunnel not exists")
+
   delete site.tunnels[fromPort]
-  broadcastStateUpdate({
-    op: "remove",
-    path: `/sites/${siteName}/tunnels/${fromPort}`
-  })
+  stateChange$.next({op: "remove", path: `/sites/${siteName}/tunnels/${fromPort}`})
   destroyTunnel(site.hostName, fromPort)
-  return {}
-}
-
-
-
-function ssh(hostName: string, command:string) {
-  return promisify(execFile)("ssh", ["-o", "BatchMode=yes", hostName, command]);
-}
-
-function scp(from: string, to: string) {
-  return promisify(execFile)("scp", ["-o", "BatchMode=yes", from, to]);
-}
-
-function interpolate(template: string, vars: {[key: string]: any}) {
-  for (const name in vars) template = template.split("${" + name + "}").join(vars[name]);
-  return template;
-}
-
-function onShutdown(): Promise<void> {
-  logger.info("Shutdown request received");
-  for (const job of jobs) clearInterval(job)
-  return Promise.resolve();
 }

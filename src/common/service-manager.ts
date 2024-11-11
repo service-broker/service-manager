@@ -4,7 +4,7 @@ import logger from "./logger";
 import sb from "./service-broker";
 
 let checkInTimer: NodeJS.Timeout;
-const shutdownHandlers: Array<() => Promise<void>> = [];
+const shutdownHandlers: Array<() => void|Promise<void>> = [];
 
 sb.setServiceHandler("service-manager-client", onRequest);
 if (config.siteName && config.serviceName) checkIn();
@@ -18,12 +18,18 @@ function onRequest(req: MessageWithHeader) {
 
 async function remoteShutdown(req: MessageWithHeader) {
   if (req.header.pid != process.pid) throw new Error("pid incorrect");
-  await shutdown()
+  logger.info("Remote shutdown requested")
+
+  for (const handler of shutdownHandlers) await handler();
+  clearTimeout(checkInTimer);
+
+  setTimeout(() => sb.shutdown(), 1000);
 }
 
 export async function shutdown() {
   for (const handler of shutdownHandlers) await handler();
   clearTimeout(checkInTimer);
+
   await new Promise(f => setTimeout(f, 1000))
   await sb.shutdown()
 }
@@ -44,6 +50,6 @@ function checkIn() {
 }
 
 
-export function addShutdownHandler(handler: () => Promise<void>) {
+export function addShutdownHandler(handler: () => void|Promise<void>) {
   shutdownHandlers.push(handler);
 }
