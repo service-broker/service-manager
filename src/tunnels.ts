@@ -1,32 +1,76 @@
 import { ChildProcess, spawn } from "child_process";
-import logger from "./common/logger"
+import * as rxjs from "rxjs";
+import logger from "./common/logger";
 
-const tunnels = new Map<string, ChildProcess>()
+const tunnels = new Map<string, rxjs.Subscription>()
 
 export function createTunnel(hostName: string, fromPort: number, toHost: string, toPort: number) {
   const key = `${hostName}:${fromPort}`
   if (tunnels.has(key)) {
     logger.warn("Can't create, tunnel exists")
   } else {
-    const tunnelArgs = fromPort < 0
-      ? ["-R", `${-fromPort}:${toHost}:${toPort}`]
-      : ["-L", `${fromPort}:${toHost}:${toPort}`]
-    const child = spawn("ssh", ["-N", "-o", "BatchMode=yes", ...tunnelArgs, hostName])
-    child.once("spawn", () => logger.info("Tunnel", child.pid, "STARTED"))
-    child.on("error", err => logger.error("Tunnel", child.pid, err))
-    child.once("close", () => logger.info("Tunnel", child.pid, "TERMINATED"))
-    tunnels.set(key, child)
+    tunnels.set(key, setup(hostName, fromPort, toHost, toPort))
   }
 }
 
 export function destroyTunnel(hostName: string, fromPort: number) {
   const key = `${hostName}:${fromPort}`
-  const child = tunnels.get(key)
-  if (child) {
-    logger.info("Tunnel", child.pid, "kill")
-    child.kill()
+  const sub = tunnels.get(key)
+  if (sub) {
+    logger.info("Tunnel stop()", hostName, fromPort)
+    sub.unsubscribe()
     tunnels.delete(key)
   } else {
     logger.warn("Can't destroy, tunnel not exists")
+  }
+}
+
+
+
+function setup(hostName: string, fromPort: number, toHost: string, toPort: number) {
+  const abortCtrl = new AbortController()
+
+  return rxjs.defer(makeChild).pipe(
+    rxjs.exhaustMap(child =>
+      rxjs.merge(
+        rxjs.timer(10*1000),
+        waitTerminate(child).then(() => {throw "recreate"})
+      )
+    ),
+    rxjs.retry({
+      delay: (err, retryCount) => rxjs.timer(retryCount <= 1 ? 1000 : 15*1000),
+      resetOnSuccess: true
+    }),
+    rxjs.finalize(() => abortCtrl.abort())
+  ).subscribe()
+
+  async function makeChild() {
+    try {
+      const child = spawn("ssh", [
+        "-N", "-o", "BatchMode=yes",
+        ...(fromPort < 0
+          ? ["-R", `${-fromPort}:${toHost}:${toPort}`]
+          : ["-L", `${fromPort}:${toHost}:${toPort}`]
+        ),
+        hostName
+      ], {
+        signal: abortCtrl.signal
+      })
+      await new Promise((f,r) => child.once("spawn", f).once("error", r))
+      logger.info("Tunnel STARTED", hostName, fromPort, child.pid)
+      return child
+    } catch (err) {
+      logger.error("Tunnel start()", hostName, fromPort, err)
+      throw err
+    }
+  }
+
+  async function waitTerminate(child: ChildProcess) {
+    child.on("error", err => {
+      if (err.name != "AbortError")
+        logger.error("Tunnel ERROR", hostName, fromPort, child.pid, err)
+    })
+    await new Promise(f => child.once("close", f))
+    logger.info("Tunnel TERMINATED", hostName, fromPort, child.pid)
   }
 }
