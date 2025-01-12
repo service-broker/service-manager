@@ -84,7 +84,7 @@ function setup(hostName, fromPort, toHost, toPort) {
             if (err.name != "AbortError")
                 logger_1.default.error("Tunnel ERROR", hostName, fromPort, child.pid, err);
         });
-        await new Promise(f => child.once("close", f));
-        logger_1.default.info("Tunnel TERMINATED", hostName, fromPort, child.pid);
+        const exitCode = await new Promise(fulfill => child.once("close", (code, signal) => fulfill(signal ?? code)));
+        logger_1.default.info("Tunnel TERMINATED", hostName, fromPort, child.pid, exitCode);
     }
 }
