@@ -1,6 +1,11 @@
 import { ChildProcess, spawn } from "child_process";
 import * as rxjs from "rxjs";
 import logger from "./common/logger";
+import { addShutdownHandler } from "./common/service-manager";
+
+const shutdown$ = rxjs.fromEventPattern(addShutdownHandler).pipe(
+  rxjs.shareReplay()
+)
 
 const tunnels = new Map<string, rxjs.Subscription>()
 
@@ -41,6 +46,7 @@ function setup(hostName: string, fromPort: number, toHost: string, toPort: numbe
       delay: (err, retryCount) => rxjs.timer(retryCount <= 1 ? 1000 : 15*1000),
       resetOnSuccess: true
     }),
+    rxjs.takeUntil(shutdown$),
     rxjs.finalize(() => abortCtrl.abort())
   ).subscribe()
 

@@ -31,6 +31,8 @@ exports.destroyTunnel = destroyTunnel;
 const child_process_1 = require("child_process");
 const rxjs = __importStar(require("rxjs"));
 const logger_1 = __importDefault(require("./common/logger"));
+const service_manager_1 = require("./common/service-manager");
+const shutdown$ = rxjs.fromEventPattern(service_manager_1.addShutdownHandler).pipe(rxjs.shareReplay());
 const tunnels = new Map();
 function createTunnel(hostName, fromPort, toHost, toPort) {
     const key = `${hostName}:${fromPort}`;
@@ -58,7 +60,7 @@ function setup(hostName, fromPort, toHost, toPort) {
     return rxjs.defer(makeChild).pipe(rxjs.exhaustMap(child => rxjs.merge(rxjs.timer(10 * 1000), waitTerminate(child).then(() => { throw "recreate"; }))), rxjs.retry({
         delay: (err, retryCount) => rxjs.timer(retryCount <= 1 ? 1000 : 15 * 1000),
         resetOnSuccess: true
-    }), rxjs.finalize(() => abortCtrl.abort())).subscribe();
+    }), rxjs.takeUntil(shutdown$), rxjs.finalize(() => abortCtrl.abort())).subscribe();
     async function makeChild() {
         try {
             const child = (0, child_process_1.spawn)("ssh", [
