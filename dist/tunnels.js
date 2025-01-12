@@ -62,7 +62,7 @@ function setup(hostName, fromPort, toHost, toPort) {
     async function makeChild() {
         try {
             const child = (0, child_process_1.spawn)("ssh", [
-                "-N", "-o", "BatchMode=yes",
+                "-N", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
                 ...(fromPort < 0
                     ? ["-R", `${-fromPort}:${toHost}:${toPort}`]
                     : ["-L", `${fromPort}:${toHost}:${toPort}`]),
