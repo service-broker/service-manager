@@ -153,7 +153,12 @@ function clientLogin(password, endpointId) {
     clients[endpointId] = { endpointId };
     return {
         header: { serverTime: Date.now() },
-        payload: JSON.stringify(state)
+        payload: JSON.stringify({
+            ...state,
+            config: {
+                startCommand: config_1.default.startCommand
+            }
+        })
     };
 }
 function broadcastStateUpdate(patch) {
@@ -306,7 +311,7 @@ async function startService(siteName, serviceName) {
     (0, util_2.ssh)(site.hostName, (0, util_2.interpolate)(commands.startService, {
         deployFolder: site.deployFolder,
         serviceName,
-        startCommand: service.startCommand || config_1.default.startCommand || 'npm start'
+        startCommand: service.startCommand || config_1.default.startCommand
     }))
         .catch(err => "OK")
         .then(() => setStopped(site, service));

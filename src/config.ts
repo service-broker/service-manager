@@ -21,7 +21,7 @@ export interface Commands {
 export default {
   password: process.env.PASSWORD,
   clientsKeepAliveInterval: 30*1000,
-  startCommand: process.env.START_COMMAND,
+  startCommand: process.env.START_COMMAND || 'npm start',
 
   commands: <{[operatingSystem: string]: Commands}> {
     unix: {

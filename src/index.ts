@@ -155,7 +155,12 @@ function clientLogin(password: string, endpointId: string): Message {
   clients[endpointId] = {endpointId};
   return {
     header: {serverTime: Date.now()},
-    payload: JSON.stringify(state)
+    payload: JSON.stringify({
+      ...state,
+      config: {
+        startCommand: config.startCommand
+      }
+    })
   };
 }
 
@@ -331,7 +336,7 @@ async function startService(siteName: string, serviceName: string): Promise<void
   ssh(site.hostName, interpolate(commands.startService, {
       deployFolder: site.deployFolder,
       serviceName,
-      startCommand: service.startCommand || config.startCommand || 'npm start'
+      startCommand: service.startCommand || config.startCommand
     }))
     .catch(err => "OK")
     .then(() => setStopped(site, service))
