@@ -11,13 +11,14 @@ dotenv_1.default.config();
 exports.default = {
     password: process.env.PASSWORD,
     clientsKeepAliveInterval: 30 * 1000,
+    startCommand: process.env.START_COMMAND,
     commands: {
         unix: {
             listServices: "ls ${deployFolder}",
             readServiceConf: "cat ${deployFolder}/${serviceName}/.env",
             deployService: "cd ${deployFolder} && git clone --single-branch --branch ${repoTag} ${repoUrl} ${serviceName} && cd ${serviceName} && npm i --omit=dev --no-save",
             undeployService: "rm -rf ${deployFolder}/${serviceName}",
-            startService: "cd ${deployFolder}/${serviceName} && " + (process.env.START_COMMAND ?? "npm start") + " 1>stdout.log 2>stderr.log",
+            startService: "cd ${deployFolder}/${serviceName} && ${startCommand} 1>stdout.log 2>stderr.log",
             killService: "kill -9 ${pid}",
             checkService: "timeout ${timeout} tail -f --pid=${pid} /dev/null; kill -0 ${pid}",
             updateService: "cd ${deployFolder}/${serviceName} && git fetch origin ${repoTag} && git reset --hard origin/${repoTag} && npm i --omit=dev --no-save",
@@ -28,7 +29,7 @@ exports.default = {
             readServiceConf: "type ${deployFolder}\\${serviceName}\\.env",
             deployService: "cd ${deployFolder} && git clone --single-branch --branch ${repoTag} ${repoUrl} ${serviceName} && cd ${serviceName} && npm i --omit=dev --no-save",
             undeployService: "rmdir /S /Q ${deployFolder}\\${serviceName}",
-            startService: "cd ${deployFolder}\\${serviceName} && " + (process.env.START_COMMAND ?? "npm start") + " 1>stdout.log 2>stderr.log",
+            startService: "cd ${deployFolder}\\${serviceName} && ${startCommand} 1>stdout.log 2>stderr.log",
             killService: "taskkill /F /PID ${pid}",
             checkService: "powershell Wait-Process -Id ${pid} -Timeout ${timeout}; Get-Process -Id ${pid}",
             updateService: "cd ${deployFolder}\\${serviceName} && git fetch origin ${repoTag} && git reset --hard origin/${repoTag} && npm i --omit=dev --no-save",

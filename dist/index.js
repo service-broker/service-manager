@@ -110,7 +110,7 @@ function onRequest(req) {
     else if (method == "removeSite")
         return removeSite(args.siteName);
     else if (method == "deployService")
-        return deployService(args.siteName, args.serviceName, args.repoUrl, args.repoTag);
+        return deployService(args.siteName, args.serviceName, args.repoUrl, args.repoTag, args.startCommand);
     else if (method == "undeployService")
         return undeployService(args.siteName, args.serviceName);
     else if (method == "startService")
@@ -217,6 +217,7 @@ async function getDeployedServices(site) {
             serviceName,
             repoUrl: envInfo.REPO_URL,
             repoTag: envInfo.REPO_TAG,
+            startCommand: envInfo.START_COMMAND,
             status: ServiceStatus.STOPPED
         };
         if (envInfo.SITE_NAME != site.siteName) {
@@ -237,7 +238,7 @@ function isSiteActive(site) {
     return Object.values(site.services).some(x => x.status != ServiceStatus.STOPPED)
         || Object.values(site.tunnels).length > 0;
 }
-async function deployService(siteName, serviceName, repoUrl, repoTag) {
+async function deployService(siteName, serviceName, repoUrl, repoTag, startCommand) {
     (0, assert_1.default)(siteName && serviceName && repoUrl, "Missing args");
     const site = state.sites[siteName];
     (0, assert_1.default)(site, "Site not found");
@@ -247,11 +248,12 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
         deployFolder: site.deployFolder,
         serviceName,
         repoUrl,
-        repoTag: repoTag || "master"
+        repoTag: repoTag || "master",
     }));
     await writeServiceConf(site, serviceName, {
         REPO_URL: repoUrl,
         REPO_TAG: repoTag,
+        START_COMMAND: startCommand,
         SERVICE_BROKER_URL: site.serviceBrokerUrl,
         SITE_NAME: siteName,
         SERVICE_NAME: serviceName,
@@ -260,6 +262,7 @@ async function deployService(siteName, serviceName, repoUrl, repoTag) {
         serviceName,
         repoUrl,
         repoTag,
+        startCommand,
         status: ServiceStatus.STOPPED
     };
     stateChange$.next({ op: "add", path: `/sites/${siteName}/services/${serviceName}`, value: site.services[serviceName] });
@@ -300,7 +303,11 @@ async function startService(siteName, serviceName) {
     (0, assert_1.default)(service, "Service not exists");
     (0, assert_1.default)(service.status == ServiceStatus.STOPPED, "Service not stopped");
     const commands = config_1.default.commands[site.operatingSystem];
-    (0, util_2.ssh)(site.hostName, (0, util_2.interpolate)(commands.startService, { deployFolder: site.deployFolder, serviceName }))
+    (0, util_2.ssh)(site.hostName, (0, util_2.interpolate)(commands.startService, {
+        deployFolder: site.deployFolder,
+        serviceName,
+        startCommand: service.startCommand || config_1.default.startCommand || 'npm start'
+    }))
         .catch(err => "OK")
         .then(() => setStopped(site, service));
     service.status = ServiceStatus.STARTING;

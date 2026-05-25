@@ -27,6 +27,7 @@ interface Service {
   serviceName: string;
   repoUrl: string;
   repoTag?: string;
+  startCommand?: string;
   status: ServiceStatus;
   pid?: string;
   endpointId?: string;
@@ -127,7 +128,7 @@ function onRequest(req: MessageWithHeader): Message|void|Promise<Message|void> {
   if (!client) throw new Error("Unauthorized");
   else if (method == "addSite") return addSite(args.siteName, args.hostName, args.deployFolder, args.serviceBrokerUrl);
   else if (method == "removeSite") return removeSite(args.siteName);
-  else if (method == "deployService") return deployService(args.siteName, args.serviceName, args.repoUrl, args.repoTag);
+  else if (method == "deployService") return deployService(args.siteName, args.serviceName, args.repoUrl, args.repoTag, args.startCommand);
   else if (method == "undeployService") return undeployService(args.siteName, args.serviceName);
   else if (method == "startService") return startService(args.siteName, args.serviceName);
   else if (method == "stopService") return stopService(args.siteName, args.serviceName);
@@ -226,6 +227,7 @@ async function getDeployedServices(site: Site): Promise<{[key: string]: Service}
       serviceName,
       repoUrl: envInfo.REPO_URL,
       repoTag: envInfo.REPO_TAG,
+      startCommand: envInfo.START_COMMAND,
       status: ServiceStatus.STOPPED
     };
     if (envInfo.SITE_NAME != site.siteName) {
@@ -252,7 +254,7 @@ function isSiteActive(site: Site): boolean {
 }
 
 
-async function deployService(siteName: string, serviceName: string, repoUrl: string, repoTag: string|undefined): Promise<Message> {
+async function deployService(siteName: string, serviceName: string, repoUrl: string, repoTag: string|undefined, startCommand: string|undefined): Promise<Message> {
   assert(siteName && serviceName && repoUrl, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
@@ -263,11 +265,12 @@ async function deployService(siteName: string, serviceName: string, repoUrl: str
     deployFolder: site.deployFolder,
     serviceName,
     repoUrl,
-    repoTag: repoTag || "master"
+    repoTag: repoTag || "master",
   }))
   await writeServiceConf(site, serviceName, {
     REPO_URL: repoUrl,
     REPO_TAG: repoTag,
+    START_COMMAND: startCommand,
     SERVICE_BROKER_URL: site.serviceBrokerUrl,
     SITE_NAME: siteName,
     SERVICE_NAME: serviceName,
@@ -276,6 +279,7 @@ async function deployService(siteName: string, serviceName: string, repoUrl: str
     serviceName,
     repoUrl,
     repoTag,
+    startCommand,
     status: ServiceStatus.STOPPED
   };
   stateChange$.next({op: "add", path: `/sites/${siteName}/services/${serviceName}`, value: site.services[serviceName]});
@@ -324,7 +328,11 @@ async function startService(siteName: string, serviceName: string): Promise<void
   assert(service.status == ServiceStatus.STOPPED, "Service not stopped");
 
   const commands = config.commands[site.operatingSystem];
-  ssh(site.hostName, interpolate(commands.startService, {deployFolder: site.deployFolder, serviceName}))
+  ssh(site.hostName, interpolate(commands.startService, {
+      deployFolder: site.deployFolder,
+      serviceName,
+      startCommand: service.startCommand || config.startCommand || 'npm start'
+    }))
     .catch(err => "OK")
     .then(() => setStopped(site, service))
 
