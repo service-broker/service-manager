@@ -453,8 +453,14 @@ async function updateServiceConf(siteName: string, serviceName: string, serviceC
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");
+  const service = site.services[serviceName];
+  assert(service, "Service not exists");
 
   await writeServiceConf(site, serviceName, serviceConf);
+  service.repoUrl = serviceConf.REPO_URL || service.repoUrl;
+  service.repoTag = serviceConf.REPO_TAG || undefined;
+  service.startCommand = serviceConf.START_COMMAND || undefined;
+  stateChange$.next({op: "replace", path: `/sites/${siteName}/services/${serviceName}`, value: service});
 }
 
 
