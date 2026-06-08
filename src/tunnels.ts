@@ -1,11 +1,7 @@
 import { ChildProcess, spawn } from "child_process";
 import * as rxjs from "rxjs";
-import logger from "./common/logger";
-import { addShutdownHandler } from "./common/service-manager";
-
-const shutdown$ = rxjs.fromEventPattern(addShutdownHandler).pipe(
-  rxjs.shareReplay()
-)
+import logger from "./common/logger.js";
+import { shutdown$ } from "./common/service-manager.js";
 
 const tunnels = new Map<string, rxjs.Subscription>()
 

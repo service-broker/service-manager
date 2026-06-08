@@ -1,11 +1,10 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
-    "target": "ES2020",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
     "strict": true,
-    "moduleResolution": "NodeNext",
-    "declaration": false,
-    "newLine": "LF",
+    "newLine": "lf",
     "rootDir": "src",
     "outDir": "dist"
   },

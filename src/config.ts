@@ -1,7 +1,7 @@
 import assert from "assert";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ quiet: true })
 
 assert(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL")
 assert(process.env.PASSWORD, "Missing env PASSWORD")

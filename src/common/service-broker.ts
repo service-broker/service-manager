@@ -1,7 +1,15 @@
-import { ServiceBroker } from "@service-broker/service-broker-client";
-import config from "../config";
-import logger from "./logger";
+import { ServiceBroker } from "@service-broker/client-node";
+import config from "../config.js";
+import logger from "./logger.js";
 
+const sb = new ServiceBroker({
+  url: config.serviceBrokerUrl,
+  repeatConfig: { delay: 1_000 },
+  retryConfig: { delay: 15_000 }
+})
 
-const defaultServiceBroker = new ServiceBroker({url: config.serviceBrokerUrl, logger});
-export default defaultServiceBroker;
+sb.on('connect', () => logger.info('Service broker connection established'))
+  .on('close', (code, reason) => logger.info('Service broker connection closed', code, reason))
+  .on('error', err => logger.error('Service broker connection error', err))
+
+export default sb

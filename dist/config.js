@@ -1,14 +1,9 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const assert_1 = __importDefault(require("assert"));
-const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
-(0, assert_1.default)(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL");
-(0, assert_1.default)(process.env.PASSWORD, "Missing env PASSWORD");
-exports.default = {
+import assert from "assert";
+import dotenv from "dotenv";
+dotenv.config({ quiet: true });
+assert(process.env.SERVICE_BROKER_URL, "Missing env SERVICE_BROKER_URL");
+assert(process.env.PASSWORD, "Missing env PASSWORD");
+export default {
     password: process.env.PASSWORD,
     clientsKeepAliveInterval: 30 * 1000,
     startCommand: process.env.START_COMMAND || 'npm start',

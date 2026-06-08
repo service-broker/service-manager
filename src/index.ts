@@ -1,17 +1,16 @@
-import { Message, MessageWithHeader } from "@service-broker/service-broker-client";
+import type { Message, MessageWithHeader } from "@service-broker/client-node";
 import assert from "assert";
-import { ChildProcess } from "child_process";
+import type { ChildProcess } from "child_process";
 import dotenv from "dotenv";
-import fs from "fs";
+import fsp from "fs/promises";
 import * as rxjs from "rxjs";
 import { tmpName } from "tmp";
-import { promisify } from "util";
-import logger from "./common/logger";
-import sb from "./common/service-broker";
-import { addShutdownHandler } from "./common/service-manager";
-import { interpolate, scp, ssh } from "./common/util";
-import config from "./config";
-import { createTunnel, destroyTunnel } from "./tunnels";
+import logger from "./common/logger.js";
+import sb from "./common/service-broker.js";
+import { shutdown$ } from "./common/service-manager.js";
+import { interpolate, scp, ssh } from "./common/util.js";
+import config from "./config.js";
+import { createTunnel, destroyTunnel } from "./tunnels.js";
 
 interface Site {
   siteName: string;
@@ -19,8 +18,8 @@ interface Site {
   operatingSystem: string;
   deployFolder: string;
   serviceBrokerUrl: string;
-  services: {[key: string]: Service}
-  tunnels: {[fromPort: number]: Tunnel}
+  services: Record<string, Service>
+  tunnels: Record<number, Tunnel>
 }
 
 interface Service {
@@ -67,33 +66,42 @@ interface Topic {
 }
 
 interface State {
-  sites: {[key: string]: Site};
-  topics: {[key: string]: Topic};
+  sites: Record<string, Site>
+  topics: Record<string, Topic>
 }
 
 
-const clients: {[endpointId: string]: Client} = {};
-const state: State = loadState();
+const clients: Record<string, Client> = {}
+const state: State = await loadState()
 const stateChange$ = new rxjs.Subject<Patch>()
-const topicHistory: {[key: string]: string[]} = {};
+const topicHistory: Record<string, string[]> = {}
 
 for (const topic of Object.values(state.topics)) {
   sb.subscribe(topic.topicName, (text: string) => onTopicMessage(topic, text))
 }
 
 
-const jobs = [
-  rxjs.interval(config.clientsKeepAliveInterval).subscribe(clientsKeepAlive),
-  stateChange$.subscribe(broadcastStateUpdate),
-  stateChange$.pipe(rxjs.auditTime(1000)).subscribe(saveState),
-]
-addShutdownHandler(() => {
-  for (const job of jobs) job.unsubscribe()
+rxjs.merge(
+  rxjs.interval(config.clientsKeepAliveInterval).pipe(
+    rxjs.tap(clientsKeepAlive)
+  ),
+  stateChange$.pipe(
+    rxjs.tap(broadcastStateUpdate)
+  ),
+  stateChange$.pipe(
+    rxjs.auditTime(1000),
+    rxjs.tap(saveState)
+  )
+).subscribe({
+  error(err) {
+    logger.error('FATAL', new Error('Job failed', { cause: err }))
+    shutdown$.next()
+  }
 })
 
-function loadState(): State {
+async function loadState(): Promise<State> {
   try {
-    const text = fs.readFileSync("state.json", "utf8");
+    const text = await fsp.readFile("state.json", "utf8");
     const state = JSON.parse(text) as State
     for (const siteName in state.sites) {
       const site = state.sites[siteName]
@@ -111,7 +119,8 @@ function loadState(): State {
 }
 
 function saveState() {
-  fs.writeFile("state.json", JSON.stringify(state), err => err && console.error(err));
+  fsp.writeFile("state.json", JSON.stringify(state))
+    .catch(logger.error)
 }
 
 
@@ -119,8 +128,9 @@ sb.advertise(config.service, onRequest)
   .then(() => logger.info(config.service.name + " service started"))
 
 function onRequest(req: MessageWithHeader): Message|void|Promise<Message|void> {
+  assert(typeof req.header.from == 'string')
   const method = req.header.method;
-  const args = req.header.args || {};
+  const args: any = req.header.args || {};
   if (method == "clientLogin") return clientLogin(args.password, req.header.from);
   else if (method == "serviceCheckIn") return serviceCheckIn(args.siteName, args.serviceName, args.pid, req.header.from);
 
@@ -218,12 +228,12 @@ async function getOperatingSystem(hostName: string): Promise<string> {
   }
 }
 
-async function getDeployedServices(site: Site): Promise<{[key: string]: Service}> {
+async function getDeployedServices(site: Site): Promise<Record<string, Service>> {
   const commands = config.commands[site.operatingSystem];
   let output = await ssh(site.hostName, interpolate(commands.listServices, {deployFolder: site.deployFolder}));
   output.stdout = output.stdout.trim();
   const serviceNames = output.stdout ? output.stdout.split(/\s+/) : [];
-  const services: {[key: string]: Service} = {};
+  const services: Record<string, Service> = {}
 
   for (const serviceName of serviceNames) {
     const envInfo = await readServiceConf(site, serviceName);
@@ -291,21 +301,21 @@ async function deployService(siteName: string, serviceName: string, repoUrl: str
   return {payload: JSON.stringify(output)};
 }
 
-async function readServiceConf(site: Site, serviceName: string): Promise<{[name: string]: string|undefined}> {
+async function readServiceConf(site: Site, serviceName: string): Promise<Record<string, string|undefined>> {
   const commands = config.commands[site.operatingSystem];
   const output = await ssh(site.hostName, interpolate(commands.readServiceConf, {deployFolder: site.deployFolder, serviceName}));
   return dotenv.parse(output.stdout);
 }
 
-async function writeServiceConf(site: Site, serviceName: string, props: {[name: string]: string|undefined}): Promise<void> {
+async function writeServiceConf(site: Site, serviceName: string, props: Record<string, string|undefined>): Promise<void> {
   const file = await new Promise<string>((fulfill, reject) => tmpName((err, path) => err ? reject(err) : fulfill(path)))
   const text = Object.keys(props)
     .filter(name => props[name] != undefined)
     .map(name => `${name}=${props[name]}`)
     .join('\n')
-  await promisify(fs.writeFile)(file, text);
+  await fsp.writeFile(file, text)
   await scp(file, `${site.hostName}:${site.deployFolder}/${serviceName}/.env`);
-  await promisify(fs.unlink)(file);
+  await fsp.unlink(file)
 }
 
 
@@ -454,7 +464,7 @@ async function getServiceConf(siteName: string, serviceName: string): Promise<Me
   return {header: {serviceConf: props}};
 }
 
-async function updateServiceConf(siteName: string, serviceName: string, serviceConf: {[name: string]: string}): Promise<void> {
+async function updateServiceConf(siteName: string, serviceName: string, serviceConf: Record<string, string>): Promise<void> {
   assert(siteName && serviceName, "Missing args");
   const site = state.sites[siteName];
   assert(site, "Site not found");

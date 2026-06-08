@@ -1,68 +1,27 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTunnel = createTunnel;
-exports.destroyTunnel = destroyTunnel;
-const child_process_1 = require("child_process");
-const rxjs = __importStar(require("rxjs"));
-const logger_1 = __importDefault(require("./common/logger"));
-const service_manager_1 = require("./common/service-manager");
-const shutdown$ = rxjs.fromEventPattern(service_manager_1.addShutdownHandler).pipe(rxjs.shareReplay());
+import { spawn } from "child_process";
+import * as rxjs from "rxjs";
+import logger from "./common/logger.js";
+import { shutdown$ } from "./common/service-manager.js";
 const tunnels = new Map();
-function createTunnel(hostName, fromPort, toHost, toPort) {
+export function createTunnel(hostName, fromPort, toHost, toPort) {
     const key = `${hostName}:${fromPort}`;
     if (tunnels.has(key)) {
-        logger_1.default.warn("Can't create, tunnel exists");
+        logger.warn("Can't create, tunnel exists");
     }
     else {
         tunnels.set(key, setup(hostName, fromPort, toHost, toPort));
     }
 }
-function destroyTunnel(hostName, fromPort) {
+export function destroyTunnel(hostName, fromPort) {
     const key = `${hostName}:${fromPort}`;
     const sub = tunnels.get(key);
     if (sub) {
-        logger_1.default.info("Tunnel stop()", hostName, fromPort);
+        logger.info("Tunnel stop()", hostName, fromPort);
         sub.unsubscribe();
         tunnels.delete(key);
     }
     else {
-        logger_1.default.warn("Can't destroy, tunnel not exists");
+        logger.warn("Can't destroy, tunnel not exists");
     }
 }
 function setup(hostName, fromPort, toHost, toPort) {
@@ -73,7 +32,7 @@ function setup(hostName, fromPort, toHost, toPort) {
     }), rxjs.takeUntil(shutdown$), rxjs.finalize(() => abortCtrl.abort())).subscribe();
     async function makeChild() {
         try {
-            const child = (0, child_process_1.spawn)("ssh", [
+            const child = spawn("ssh", [
                 "-N", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
                 ...(fromPort < 0
                     ? ["-R", `${-fromPort}:${toHost}:${toPort}`]
@@ -83,20 +42,20 @@ function setup(hostName, fromPort, toHost, toPort) {
                 signal: abortCtrl.signal
             });
             await new Promise((f, r) => child.once("spawn", f).once("error", r));
-            logger_1.default.info("Tunnel STARTED", hostName, fromPort, child.pid);
+            logger.info("Tunnel STARTED", hostName, fromPort, child.pid);
             return child;
         }
         catch (err) {
-            logger_1.default.error("Tunnel start()", hostName, fromPort, err);
+            logger.error("Tunnel start()", hostName, fromPort, err);
             throw err;
         }
     }
     async function waitTerminate(child) {
         child.on("error", err => {
             if (err.name != "AbortError")
-                logger_1.default.error("Tunnel ERROR", hostName, fromPort, child.pid, err);
+                logger.error("Tunnel ERROR", hostName, fromPort, child.pid, err);
         });
         const exitCode = await new Promise(fulfill => child.once("close", (code, signal) => fulfill(signal ?? code)));
-        logger_1.default.info("Tunnel TERMINATED", hostName, fromPort, child.pid, exitCode);
+        logger.info("Tunnel TERMINATED", hostName, fromPort, child.pid, exitCode);
     }
 }
