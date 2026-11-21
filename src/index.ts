@@ -449,6 +449,7 @@ async function updateService(siteName: string, serviceName: string): Promise<Mes
   let output = await ssh(site.hostName, interpolate(commands.updateService, {
     deployFolder: site.deployFolder,
     serviceName,
+    repoUrl: service.repoUrl,
     repoTag: service.repoTag || "master"
   }))
   return {payload: JSON.stringify(output)};
