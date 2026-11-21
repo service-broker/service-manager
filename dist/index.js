@@ -355,6 +355,7 @@ async function updateService(siteName, serviceName) {
     let output = await ssh(site.hostName, interpolate(commands.updateService, {
         deployFolder: site.deployFolder,
         serviceName,
+        repoUrl: service.repoUrl,
         repoTag: service.repoTag || "master"
     }));
     return { payload: JSON.stringify(output) };
